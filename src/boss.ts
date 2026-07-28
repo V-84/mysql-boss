@@ -1,22 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { Connection as RawConnection } from "mysql2";
-import type { Pool, ResultSetHeader } from "mysql2/promise";
-import {
-	completeJob,
-	getArchivedJob,
-	listArchive,
-	pruneArchive,
-} from "./archive.js";
-import { claimJobs } from "./claim.js";
-import { deadLetterJob, listDead, replayDead } from "./dlq.js";
-import {
-	ConfigError,
-	SingletonCollisionError,
-	ValidationError,
-} from "./errors.js";
-import { failJob } from "./fail.js";
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { getArchivedJob, listArchive, pruneArchive } from "./archive.js";
+import { withConnection } from "./connection.js";
+import { listDead, replayDead } from "./dlq.js";
+import { ConfigError, ValidationError } from "./errors.js";
 import type {
-	ActiveJob,
 	ArchivedJob,
 	DeadJob,
 	EnqueueOptions,
@@ -25,12 +13,7 @@ import type {
 	ScheduleOptions,
 } from "./index.js";
 import { migrate } from "./migrate.js";
-import {
-	ENQUEUE,
-	ENQUEUE_SINGLETON,
-	SET_READ_COMMITTED,
-	SET_UTC_TIMEZONE,
-} from "./sql.js";
+import { ENQUEUE, ENQUEUE_SINGLETON, LAST_INSERT_ID } from "./sql.js";
 import { deleteSchedule, runTick, upsertSchedule } from "./tick.js";
 import { toUtcString } from "./util.js";
 import { WorkerManager } from "./worker.js";
@@ -83,24 +66,6 @@ export class MysqlBoss {
 		) {
 			throw new ConfigError("archiveRetentionDays must be an integer >= 1");
 		}
-
-		this.setupConnectionInit();
-	}
-
-	private setupConnectionInit(): void {
-		// mysql2/promise pools emit the RAW callback-style connection on "connection",
-		// despite looser typings upstream; .promise() is required to get a then-able query.
-		this.pool.on("connection", (conn) => {
-			const raw = conn as unknown as RawConnection;
-			raw
-				.promise()
-				.query(SET_READ_COMMITTED)
-				.catch(() => {});
-			raw
-				.promise()
-				.query(SET_UTC_TIMEZONE)
-				.catch(() => {});
-		});
 	}
 
 	async migrate(): Promise<void> {
@@ -140,34 +105,46 @@ export class MysqlBoss {
 		const runAtParam = runAt ? toUtcString(runAt) : null;
 
 		if (singletonKey !== null) {
-			const [result] = await this.pool.query<ResultSetHeader>(
-				ENQUEUE_SINGLETON,
-				[
-					queue,
-					priority,
-					payloadJson,
-					singletonKey,
-					retryLimit,
-					retryDelaySecs,
-					retryBackoff,
-					runAtParam,
-				],
-			);
-			if (result.affectedRows === 0) return null;
-			return result.insertId.toString();
+			return withConnection(this.pool, async (connection) => {
+				const [result] = await connection.query<ResultSetHeader>(
+					ENQUEUE_SINGLETON,
+					[
+						queue,
+						priority,
+						payloadJson,
+						singletonKey,
+						retryLimit,
+						retryDelaySecs,
+						retryBackoff,
+						runAtParam,
+					],
+				);
+				if (result.affectedRows === 0) return null;
+				const [rows] =
+					await connection.query<(RowDataPacket & { id: string })[]>(
+						LAST_INSERT_ID,
+					);
+				return rows[0].id;
+			});
 		}
 
-		const [result] = await this.pool.query<ResultSetHeader>(ENQUEUE, [
-			queue,
-			priority,
-			payloadJson,
-			singletonKey,
-			retryLimit,
-			retryDelaySecs,
-			retryBackoff,
-			runAtParam,
-		]);
-		return result.insertId.toString();
+		return withConnection(this.pool, async (connection) => {
+			const [result] = await connection.query<ResultSetHeader>(ENQUEUE, [
+				queue,
+				priority,
+				payloadJson,
+				singletonKey,
+				retryLimit,
+				retryDelaySecs,
+				retryBackoff,
+				runAtParam,
+			]);
+			const [rows] =
+				await connection.query<(RowDataPacket & { id: string })[]>(
+					LAST_INSERT_ID,
+				);
+			return rows[0].id;
+		});
 	}
 
 	work<T>(queue: string, handler: JobHandler<T>): void {

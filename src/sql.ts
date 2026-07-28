@@ -97,10 +97,14 @@ VALUES
   (?, ?, ?, ?, ?, ?, ?, COALESCE(?, UTC_TIMESTAMP(6)));
 `;
 
+export const LAST_INSERT_ID = `
+SELECT CAST(LAST_INSERT_ID() AS CHAR) AS id;
+`;
+
 // §1.2 — Dequeue / claim
 
 export const CLAIM_SELECT = `
-SELECT id, queue, payload, retry_count, retry_limit,
+SELECT CAST(id AS CHAR) AS id, queue, payload, retry_count, retry_limit,
        retry_delay_secs, retry_backoff
 FROM jobs
 WHERE queue = ?
@@ -143,15 +147,15 @@ WHERE id = ? AND locked_by = UUID_TO_BIN(?) AND state = 'active';
 export const FAIL_RETRY = `
 UPDATE jobs
 SET state = 'available',
-    retry_count = retry_count + 1,
     run_at = UTC_TIMESTAMP(6) + INTERVAL
       LEAST(
         86400,
         IF(retry_backoff = 1,
            retry_delay_secs * POW(2, retry_count),
            retry_delay_secs)
-      ) SECOND
-      + INTERVAL FLOOR(RAND() * retry_delay_secs) SECOND,
+        + FLOOR(RAND() * retry_delay_secs)
+      ) SECOND,
+    retry_count = retry_count + 1,
     locked_by = NULL,
     lease_expires_at = NULL,
     started_at = NULL,
@@ -184,7 +188,10 @@ WHERE id = ? AND locked_by = UUID_TO_BIN(?) AND state = 'active';
 // §3.2 — DLQ query
 
 export const LIST_DEAD = `
-SELECT id, queue, priority, payload, retry_count, created_at, failed_at, last_error
+SELECT CAST(id AS CHAR) AS id, queue, priority, payload, retry_count,
+       UNIX_TIMESTAMP(created_at) AS created_at_unix,
+       UNIX_TIMESTAMP(failed_at) AS failed_at_unix,
+       last_error
 FROM jobs_dead
 WHERE queue = ? AND failed_at BETWEEN ? AND ?
 ORDER BY failed_at DESC
@@ -210,8 +217,7 @@ DELETE FROM jobs_dead WHERE id IN (?);
 
 // §4.2 — Cron tick
 
-export const DB_NOW =
-	"SELECT UNIX_TIMESTAMP(UTC_TIMESTAMP(6)) AS db_now_unix;";
+export const DB_NOW = "SELECT UNIX_TIMESTAMP(UTC_TIMESTAMP(6)) AS db_now_unix;";
 
 export const TICK_SELECT = `
 SELECT name, queue, cron, timezone, payload, job_options,
@@ -265,6 +271,12 @@ SET lease_expires_at = UTC_TIMESTAMP(6) + INTERVAL ? SECOND
 WHERE id IN (?) AND locked_by = UUID_TO_BIN(?) AND state = 'active';
 `;
 
+export const HEARTBEAT_OWNED = `
+SELECT CAST(id AS CHAR) AS id
+FROM jobs
+WHERE id IN (?) AND locked_by = UUID_TO_BIN(?) AND state = 'active';
+`;
+
 // §6.2 — Drain release
 
 export const DRAIN_RELEASE = `
@@ -277,7 +289,7 @@ WHERE id IN (?) AND locked_by = UUID_TO_BIN(?) AND state = 'active';
 // §6.3 — Stale sweep
 
 export const SWEEP_SELECT = `
-SELECT id, retry_count, retry_limit
+SELECT CAST(id AS CHAR) AS id, retry_count, retry_limit
 FROM jobs
 WHERE state = 'active' AND lease_expires_at < UTC_TIMESTAMP(6)
 ORDER BY lease_expires_at
@@ -288,11 +300,15 @@ FOR UPDATE SKIP LOCKED;
 export const SWEEP_RETRY = `
 UPDATE jobs
 SET state = 'available',
-    retry_count = retry_count + 1,
     run_at = UTC_TIMESTAMP(6) + INTERVAL
-      LEAST(86400, IF(retry_backoff = 1,
-                      retry_delay_secs * POW(2, retry_count),
-                      retry_delay_secs)) SECOND,
+      LEAST(
+        86400,
+        IF(retry_backoff = 1,
+           retry_delay_secs * POW(2, retry_count),
+           retry_delay_secs)
+        + FLOOR(RAND() * retry_delay_secs)
+      ) SECOND,
+    retry_count = retry_count + 1,
     locked_by = NULL, lease_expires_at = NULL, started_at = NULL,
     last_error = JSON_OBJECT('message', 'lease expired', 'at', UTC_TIMESTAMP(6))
 WHERE id IN (?) AND retry_count < retry_limit;
@@ -326,15 +342,21 @@ LIMIT 5000;
 // Archive query
 
 export const GET_ARCHIVED_JOB = `
-SELECT id, queue, priority, payload, singleton_key, retry_count,
-       created_at, started_at, completed_at, duration_ms
+SELECT CAST(id AS CHAR) AS id, queue, priority, payload, singleton_key, retry_count,
+       UNIX_TIMESTAMP(created_at) AS created_at_unix,
+       UNIX_TIMESTAMP(started_at) AS started_at_unix,
+       UNIX_TIMESTAMP(completed_at) AS completed_at_unix,
+       duration_ms
 FROM jobs_archive
 WHERE id = ?;
 `;
 
 export const LIST_ARCHIVE = `
-SELECT id, queue, priority, payload, singleton_key, retry_count,
-       created_at, started_at, completed_at, duration_ms
+SELECT CAST(id AS CHAR) AS id, queue, priority, payload, singleton_key, retry_count,
+       UNIX_TIMESTAMP(created_at) AS created_at_unix,
+       UNIX_TIMESTAMP(started_at) AS started_at_unix,
+       UNIX_TIMESTAMP(completed_at) AS completed_at_unix,
+       duration_ms
 FROM jobs_archive
 WHERE queue = ? AND completed_at < ?
 ORDER BY completed_at DESC
@@ -343,6 +365,7 @@ LIMIT ?;
 
 // Connection setup
 
-export const SET_READ_COMMITTED =
-	"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;";
-export const SET_UTC_TIMEZONE = `SET SESSION time_zone = '+00:00';`;
+export const INIT_SESSION = `
+SET SESSION transaction_isolation = 'READ-COMMITTED',
+            SESSION time_zone = '+00:00';
+`;

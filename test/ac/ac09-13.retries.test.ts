@@ -120,11 +120,9 @@ describe("AC 10: exponential backoff", () => {
 		const runAt = new Date(rows[0].run_at);
 		const diffSecs = (runAt.getTime() - dbNow.getTime()) / 1000;
 
-		// Should be at least ~8s in the future (10s base minus processing time)
+		// First retry uses delay * 2^0, plus up to one delay of jitter.
 		expect(diffSecs).toBeGreaterThan(5);
-		// MySQL SET evaluates left-to-right: retry_count is already 1 when
-		// computing delay, so base = 10 * 2^1 = 20s, plus 0-10s jitter
-		expect(diffSecs).toBeLessThan(35);
+		expect(diffSecs).toBeLessThan(20);
 	}, 10000);
 });
 

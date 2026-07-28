@@ -1,10 +1,11 @@
-import type { Pool, RowDataPacket } from "mysql2/promise";
+import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { acquireConnection } from "./connection.js";
 import type { ActiveJob } from "./index.js";
 import { withDeadlockRetry } from "./retry-util.js";
 import { CLAIM_SELECT, CLAIM_UPDATE } from "./sql.js";
 
 interface ClaimRow extends RowDataPacket {
-	id: bigint;
+	id: string;
 	queue: string;
 	payload: unknown;
 	retry_count: number;
@@ -21,7 +22,7 @@ export async function claimJobs(
 	leaseSeconds: number,
 ): Promise<ActiveJob[]> {
 	return withDeadlockRetry(async () => {
-		const conn = await pool.getConnection();
+		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
@@ -36,12 +37,21 @@ export async function claimJobs(
 			}
 
 			const ids = rows.map((r) => r.id);
-			await conn.query(CLAIM_UPDATE, [workerId, leaseSeconds, ids]);
+			const [result] = await conn.query<ResultSetHeader>(CLAIM_UPDATE, [
+				workerId,
+				leaseSeconds,
+				ids,
+			]);
+			if (result.affectedRows !== rows.length) {
+				throw new Error(
+					`Claim invariant violated: selected ${rows.length} jobs but updated ${result.affectedRows}`,
+				);
+			}
 
 			await conn.commit();
 
 			return rows.map((r) => ({
-				id: r.id.toString(),
+				id: r.id,
 				queue: r.queue,
 				payload: r.payload,
 				retryCount: r.retry_count,

@@ -1,9 +1,10 @@
 import type { Pool } from "mysql2/promise";
 import { completeJob } from "./archive.js";
 import { claimJobs } from "./claim.js";
+import { withConnection } from "./connection.js";
 import { deadLetterJob } from "./dlq.js";
 import { failJob } from "./fail.js";
-import { sendHeartbeat } from "./heartbeat.js";
+import { heartbeatOwnedJobs } from "./heartbeat.js";
 import type { ActiveJob, JobHandler } from "./index.js";
 import { DRAIN_RELEASE } from "./sql.js";
 import { sweepStaleJobs } from "./sweep.js";
@@ -126,39 +127,11 @@ export class WorkerManager {
 		const ac = new AbortController();
 		const key = `${queue}/${job.id}`;
 
-		const promise = (async () => {
-			try {
-				await handler(job, { signal: ac.signal });
-				if (!ac.signal.aborted) {
-					await completeJob(this.config.pool, job.id, this.config.workerId);
-				}
-			} catch (err) {
-				if (ac.signal.aborted) return;
-				const errorObj = {
-					message: err instanceof Error ? err.message : String(err),
-					stack: err instanceof Error ? err.stack : undefined,
-					at: new Date().toISOString(),
-				};
-
-				const retried = await failJob(
-					this.config.pool,
-					job.id,
-					this.config.workerId,
-					errorObj,
-				);
-
-				if (!retried) {
-					await deadLetterJob(
-						this.config.pool,
-						job.id,
-						this.config.workerId,
-						errorObj,
-					);
-				}
-			} finally {
+		const promise = this.executeJob(job, handler, ac)
+			.catch((error) => this.reportError(error, "job"))
+			.finally(() => {
 				this.inFlight.delete(key);
-			}
-		})();
+			});
 
 		this.inFlight.set(key, {
 			jobId: job.id,
@@ -168,27 +141,83 @@ export class WorkerManager {
 		});
 	}
 
+	private async executeJob(
+		job: ActiveJob,
+		handler: JobHandler,
+		abortController: AbortController,
+	): Promise<void> {
+		try {
+			await handler(job, { signal: abortController.signal });
+		} catch (error) {
+			if (abortController.signal.aborted) return;
+			await this.handleHandlerFailure(job.id, error);
+			return;
+		}
+
+		if (abortController.signal.aborted) return;
+
+		try {
+			await completeJob(this.config.pool, job.id, this.config.workerId);
+		} catch (error) {
+			this.reportError(error, "complete");
+		}
+	}
+
+	private async handleHandlerFailure(
+		jobId: string,
+		error: unknown,
+	): Promise<void> {
+		const errorObj = {
+			message: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error ? error.stack : undefined,
+			at: new Date().toISOString(),
+		};
+
+		const retried = await failJob(
+			this.config.pool,
+			jobId,
+			this.config.workerId,
+			errorObj,
+		);
+
+		if (!retried) {
+			await deadLetterJob(
+				this.config.pool,
+				jobId,
+				this.config.workerId,
+				errorObj,
+			);
+		}
+	}
+
+	private reportError(error: unknown, context: string): void {
+		try {
+			this.config.onError(error, context);
+		} catch {
+			// User-provided error reporters must not break worker bookkeeping.
+		}
+	}
+
 	private async heartbeat(): Promise<void> {
 		if (this.inFlight.size === 0) return;
 
 		const entries = [...this.inFlight.values()];
 		const ids = entries.map((j) => j.jobIdBigint);
 		try {
-			const renewed = await sendHeartbeat(
+			const ownedIds = await heartbeatOwnedJobs(
 				this.config.pool,
 				ids,
 				this.config.workerId,
 				this.config.leaseSeconds,
 			);
 
-			if (renewed < ids.length) {
-				// Some leases were stolen — abort those handlers
-				for (const entry of entries) {
+			for (const entry of entries) {
+				if (!ownedIds.has(entry.jobId)) {
 					entry.abortController.abort();
 				}
 			}
 		} catch (err) {
-			this.config.onError(err, "heartbeat");
+			this.reportError(err, "heartbeat");
 		}
 	}
 
@@ -246,10 +275,12 @@ export class WorkerManager {
 
 				if (stragglerIds.length > 0) {
 					try {
-						await this.config.pool.query(DRAIN_RELEASE, [
-							stragglerIds,
-							this.config.workerId,
-						]);
+						await withConnection(this.config.pool, async (connection) => {
+							await connection.query(DRAIN_RELEASE, [
+								stragglerIds,
+								this.config.workerId,
+							]);
+						});
 					} catch {
 						// best effort
 					}

@@ -1,4 +1,5 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { acquireConnection } from "./connection.js";
 import { withDeadlockRetry } from "./retry-util.js";
 import {
 	SWEEP_DLQ_DELETE,
@@ -8,14 +9,14 @@ import {
 } from "./sql.js";
 
 interface SweepRow extends RowDataPacket {
-	id: bigint;
+	id: string;
 	retry_count: number;
 	retry_limit: number;
 }
 
 export async function sweepStaleJobs(pool: Pool): Promise<number> {
 	return withDeadlockRetry(async () => {
-		const conn = await pool.getConnection();
+		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
@@ -26,8 +27,8 @@ export async function sweepStaleJobs(pool: Pool): Promise<number> {
 				return 0;
 			}
 
-			const retryable: bigint[] = [];
-			const exhausted: bigint[] = [];
+			const retryable: string[] = [];
+			const exhausted: string[] = [];
 
 			for (const row of rows) {
 				if (row.retry_count < row.retry_limit) {

@@ -1,4 +1,5 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { acquireConnection, withConnection } from "./connection.js";
 import { SingletonCollisionError } from "./errors.js";
 import type { DeadJob } from "./index.js";
 import { withDeadlockRetry } from "./retry-util.js";
@@ -9,6 +10,7 @@ import {
 	REPLAY_DELETE,
 	REPLAY_INSERT,
 } from "./sql.js";
+import { toUtcString } from "./util.js";
 
 export async function deadLetterJob(
 	pool: Pool,
@@ -17,7 +19,7 @@ export async function deadLetterJob(
 	error: { message: string; stack?: string; at: string },
 ): Promise<boolean> {
 	return withDeadlockRetry(async () => {
-		const conn = await pool.getConnection();
+		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
@@ -45,13 +47,13 @@ export async function deadLetterJob(
 }
 
 interface DeadRow extends RowDataPacket {
-	id: bigint;
+	id: string;
 	queue: string;
 	priority: number;
 	payload: unknown;
 	retry_count: number;
-	created_at: Date;
-	failed_at: Date;
+	created_at_unix: number | string;
+	failed_at_unix: number | string;
 	last_error: { message: string; stack?: string; at: string } | null;
 }
 
@@ -63,30 +65,32 @@ export async function listDead(
 	limit: number,
 	offset: number,
 ): Promise<DeadJob[]> {
-	const [rows] = await pool.query<DeadRow[]>(LIST_DEAD, [
-		queue,
-		after,
-		before,
-		limit,
-		offset,
-	]);
-	return rows.map((r) => ({
-		id: r.id.toString(),
-		queue: r.queue,
-		payload: r.payload,
-		priority: r.priority,
-		retryCount: r.retry_count,
-		createdAt: r.created_at,
-		failedAt: r.failed_at,
-		lastError: r.last_error,
-	}));
+	return withConnection(pool, async (connection) => {
+		const [rows] = await connection.query<DeadRow[]>(LIST_DEAD, [
+			queue,
+			toUtcString(after),
+			toUtcString(before),
+			limit,
+			offset,
+		]);
+		return rows.map((r) => ({
+			id: r.id,
+			queue: r.queue,
+			payload: r.payload,
+			priority: r.priority,
+			retryCount: r.retry_count,
+			createdAt: new Date(Number(r.created_at_unix) * 1000),
+			failedAt: new Date(Number(r.failed_at_unix) * 1000),
+			lastError: r.last_error,
+		}));
+	});
 }
 
 const ER_DUP_ENTRY = 1062;
 
 export async function replayDead(pool: Pool, ids: string[]): Promise<number> {
 	return withDeadlockRetry(async () => {
-		const conn = await pool.getConnection();
+		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 

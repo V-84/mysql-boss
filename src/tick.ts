@@ -1,4 +1,5 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { acquireConnection, withConnection } from "./connection.js";
 import { nextOccurrence } from "./cron/next.js";
 import { parseCron } from "./cron/parse.js";
 import type { EnqueueOptions } from "./index.js";
@@ -25,22 +26,21 @@ interface ScheduleRow extends RowDataPacket {
 		retryDelaySecs?: number;
 		retryBackoff?: boolean;
 	} | null;
-	next_run_at: Date;
-	next_run_at_unix: number;
+	next_run_at_unix: number | string;
 }
 
 interface DbNowRow extends RowDataPacket {
-	db_now_unix: number;
+	db_now_unix: number | string;
 }
 
 export async function runTick(pool: Pool): Promise<number> {
 	return withDeadlockRetry(async () => {
-		const conn = await pool.getConnection();
+		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
 			const [nowRows] = await conn.query<DbNowRow[]>(DB_NOW);
-			const dbNow = new Date(nowRows[0].db_now_unix * 1000);
+			const dbNow = new Date(Number(nowRows[0].db_now_unix) * 1000);
 
 			const [schedules] = await conn.query<ScheduleRow[]>(TICK_SELECT);
 
@@ -60,16 +60,16 @@ export async function runTick(pool: Pool): Promise<number> {
 				await conn.query(TICK_ENQUEUE, [
 					sched.queue,
 					priority,
-					sched.payload ? JSON.stringify(sched.payload) : null,
+					sched.payload != null ? JSON.stringify(sched.payload) : null,
 					sched.name,
-					sched.next_run_at,
+					toUtcString(new Date(Number(sched.next_run_at_unix) * 1000)),
 					retryLimit,
 					retryDelaySecs,
 					retryBackoff,
 				]);
 
 				const fields = parseCron(sched.cron);
-				const nextRunAt = new Date(sched.next_run_at_unix * 1000);
+				const nextRunAt = new Date(Number(sched.next_run_at_unix) * 1000);
 				const base = dbNow > nextRunAt ? dbNow : nextRunAt;
 				const nextRun = nextOccurrence(fields, base, sched.timezone);
 
@@ -103,19 +103,25 @@ export async function upsertSchedule(
 	} | null,
 ): Promise<void> {
 	const fields = parseCron(cron);
-	const nextRun = nextOccurrence(fields, new Date(), timezone);
+	await withConnection(pool, async (connection) => {
+		const [nowRows] = await connection.query<DbNowRow[]>(DB_NOW);
+		const dbNow = new Date(Number(nowRows[0].db_now_unix) * 1000);
+		const nextRun = nextOccurrence(fields, dbNow, timezone);
 
-	await pool.query(SCHEDULE_UPSERT, [
-		name,
-		queue,
-		cron,
-		timezone,
-		payload ? JSON.stringify(payload) : null,
-		jobOptions ? JSON.stringify(jobOptions) : null,
-		toUtcString(nextRun),
-	]);
+		await connection.query(SCHEDULE_UPSERT, [
+			name,
+			queue,
+			cron,
+			timezone,
+			payload != null ? JSON.stringify(payload) : null,
+			jobOptions ? JSON.stringify(jobOptions) : null,
+			toUtcString(nextRun),
+		]);
+	});
 }
 
 export async function deleteSchedule(pool: Pool, name: string): Promise<void> {
-	await pool.query(SCHEDULE_DELETE, [name]);
+	await withConnection(pool, async (connection) => {
+		await connection.query(SCHEDULE_DELETE, [name]);
+	});
 }
