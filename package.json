@@ -27,6 +27,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "lint": "biome check src/ test/",
     "lint:fix": "biome check --write src/ test/",
@@ -53,6 +54,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "typescript": "^7.0.2",
     "vitest": "^2.1.0"
   }
