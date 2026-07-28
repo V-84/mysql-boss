@@ -88,6 +88,14 @@ function parseField(
 	return result;
 }
 
+function normalizeDow(set: Set<number>): Set<number> {
+	if (set.has(7)) {
+		set.add(0);
+		set.delete(7);
+	}
+	return set;
+}
+
 export function parseCron(expression: string): CronFields {
 	const parts = expression.trim().split(/\s+/);
 	if (parts.length !== 5) {
@@ -103,7 +111,7 @@ export function parseCron(expression: string): CronFields {
 		hours: parseField(hourStr, 0, 23),
 		daysOfMonth: parseField(domStr, 1, 31, undefined),
 		months: parseField(monStr, 1, 12, MONTH_NAMES),
-		daysOfWeek: parseField(dowStr, 0, 6, DOW_NAMES),
+		daysOfWeek: normalizeDow(parseField(dowStr, 0, 7, DOW_NAMES)),
 		hasDom: domStr !== "*",
 		hasDow: dowStr !== "*",
 	};

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Connection as RawConnection } from "mysql2";
 import type { Pool, ResultSetHeader } from "mysql2/promise";
 import {
 	completeJob,
@@ -31,6 +32,7 @@ import {
 	SET_UTC_TIMEZONE,
 } from "./sql.js";
 import { deleteSchedule, runTick, upsertSchedule } from "./tick.js";
+import { toUtcString } from "./util.js";
 import { WorkerManager } from "./worker.js";
 
 export class MysqlBoss {
@@ -50,6 +52,7 @@ export class MysqlBoss {
 	private tickIntervalMs: number;
 	private archiveRetentionDays: number;
 	private drainTimeoutMs: number;
+	private onError: (err: unknown, context: string) => void;
 
 	constructor(opts: MysqlBossOptions) {
 		this.pool = opts.pool;
@@ -64,6 +67,7 @@ export class MysqlBoss {
 		this.tickIntervalMs = opts.tickIntervalMs ?? 30_000;
 		this.archiveRetentionDays = opts.archiveRetentionDays ?? 14;
 		this.drainTimeoutMs = opts.drainTimeoutMs ?? 30_000;
+		this.onError = opts.onError ?? (() => {});
 
 		if (this.batchSize < 1 || this.batchSize > 100) {
 			throw new ConfigError("batchSize must be between 1 and 100");
@@ -84,10 +88,18 @@ export class MysqlBoss {
 	}
 
 	private setupConnectionInit(): void {
-		// biome-ignore lint/suspicious/noExplicitAny: mysql2 promise pool doesn't expose the underlying callback pool type
-		(this.pool as any).pool.on("connection", (conn: any) => {
-			conn.query(SET_READ_COMMITTED, () => {});
-			conn.query(SET_UTC_TIMEZONE, () => {});
+		// mysql2/promise pools emit the RAW callback-style connection on "connection",
+		// despite looser typings upstream; .promise() is required to get a then-able query.
+		this.pool.on("connection", (conn) => {
+			const raw = conn as unknown as RawConnection;
+			raw
+				.promise()
+				.query(SET_READ_COMMITTED)
+				.catch(() => {});
+			raw
+				.promise()
+				.query(SET_UTC_TIMEZONE)
+				.catch(() => {});
 		});
 	}
 
@@ -125,7 +137,7 @@ export class MysqlBoss {
 		}
 
 		const payloadJson = payload != null ? JSON.stringify(payload) : null;
-		const runAtParam = runAt ?? null;
+		const runAtParam = runAt ? toUtcString(runAt) : null;
 
 		if (singletonKey !== null) {
 			const [result] = await this.pool.query<ResultSetHeader>(
@@ -174,6 +186,7 @@ export class MysqlBoss {
 				heartbeatSeconds: this.heartbeatSeconds,
 				sweepIntervalMs: this.sweepIntervalMs,
 				drainTimeoutMs: this.drainTimeoutMs,
+				onError: this.onError,
 			});
 			this.startTick();
 		}
@@ -192,8 +205,8 @@ export class MysqlBoss {
 					this.pruneCounter = 0;
 					await pruneArchive(this.pool, this.archiveRetentionDays);
 				}
-			} catch {
-				// tick failure is not fatal
+			} catch (err) {
+				this.onError(err, "tick");
 			}
 		}, this.tickIntervalMs * jitter);
 		this.tickTimer.unref();

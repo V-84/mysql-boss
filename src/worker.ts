@@ -18,6 +18,7 @@ interface WorkerConfig {
 	heartbeatSeconds: number;
 	sweepIntervalMs: number;
 	drainTimeoutMs: number;
+	onError: (err: unknown, context: string) => void;
 }
 
 interface InFlightJob {
@@ -105,8 +106,8 @@ export class WorkerManager {
 				setImmediate(() => this.poll(queue));
 				return;
 			}
-		} catch {
-			// claim error — back off
+		} catch (err) {
+			this.config.onError(err, "poll");
 		}
 
 		this.schedulePoll(queue);
@@ -170,24 +171,32 @@ export class WorkerManager {
 	private async heartbeat(): Promise<void> {
 		if (this.inFlight.size === 0) return;
 
-		const ids = [...this.inFlight.values()].map((j) => j.jobIdBigint);
+		const entries = [...this.inFlight.values()];
+		const ids = entries.map((j) => j.jobIdBigint);
 		try {
-			await sendHeartbeat(
+			const renewed = await sendHeartbeat(
 				this.config.pool,
 				ids,
 				this.config.workerId,
 				this.config.leaseSeconds,
 			);
-		} catch {
-			// heartbeat failure is not fatal
+
+			if (renewed < ids.length) {
+				// Some leases were stolen — abort those handlers
+				for (const entry of entries) {
+					entry.abortController.abort();
+				}
+			}
+		} catch (err) {
+			this.config.onError(err, "heartbeat");
 		}
 	}
 
 	private async sweep(): Promise<void> {
 		try {
 			await sweepStaleJobs(this.config.pool);
-		} catch {
-			// sweep failure is not fatal
+		} catch (err) {
+			this.config.onError(err, "sweep");
 		}
 	}
 
@@ -216,6 +225,11 @@ export class WorkerManager {
 			]);
 
 			if (result === "timeout") {
+				// Snapshot before aborting — finally blocks will clear inFlight
+				const stragglerIds = [...this.inFlight.values()].map(
+					(j) => j.jobIdBigint,
+				);
+
 				for (const entry of this.inFlight.values()) {
 					entry.abortController.abort();
 				}
@@ -230,12 +244,10 @@ export class WorkerManager {
 					grace,
 				]);
 
-				const stragglers = [...this.inFlight.values()];
-				if (stragglers.length > 0) {
-					const ids = stragglers.map((j) => j.jobIdBigint);
+				if (stragglerIds.length > 0) {
 					try {
 						await this.config.pool.query(DRAIN_RELEASE, [
-							ids,
+							stragglerIds,
 							this.config.workerId,
 						]);
 					} catch {

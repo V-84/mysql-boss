@@ -210,10 +210,13 @@ DELETE FROM jobs_dead WHERE id IN (?);
 
 // §4.2 — Cron tick
 
-export const DB_NOW = "SELECT UTC_TIMESTAMP(6) AS db_now;";
+export const DB_NOW =
+	"SELECT UNIX_TIMESTAMP(UTC_TIMESTAMP(6)) AS db_now_unix;";
 
 export const TICK_SELECT = `
-SELECT name, queue, cron, timezone, payload, job_options, next_run_at
+SELECT name, queue, cron, timezone, payload, job_options,
+       next_run_at,
+       UNIX_TIMESTAMP(next_run_at) AS next_run_at_unix
 FROM schedules
 WHERE next_run_at <= UTC_TIMESTAMP(6)
 ORDER BY next_run_at

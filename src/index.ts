@@ -11,6 +11,7 @@ export interface MysqlBossOptions {
 	tickIntervalMs?: number;
 	archiveRetentionDays?: number;
 	drainTimeoutMs?: number;
+	onError?: (err: unknown, context: string) => void;
 }
 
 export interface EnqueueOptions {

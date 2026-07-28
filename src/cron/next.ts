@@ -56,7 +56,7 @@ function localToUtc(
 ): Date | null {
 	const guess = new Date(Date.UTC(year, month - 1, day, hour, minute));
 
-	for (let offset = -14 * 60; offset <= 14 * 60; offset += 30) {
+	for (let offset = -14 * 60; offset <= 14 * 60; offset += 15) {
 		const candidate = new Date(guess.getTime() + offset * 60_000);
 		const parts = getLocalParts(candidate, tz);
 		if (

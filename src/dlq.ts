@@ -85,37 +85,39 @@ export async function listDead(
 const ER_DUP_ENTRY = 1062;
 
 export async function replayDead(pool: Pool, ids: string[]): Promise<number> {
-	const conn = await pool.getConnection();
-	try {
-		await conn.beginTransaction();
-
+	return withDeadlockRetry(async () => {
+		const conn = await pool.getConnection();
 		try {
-			const bigIds = ids.map(BigInt);
-			const [result] = await conn.query<ResultSetHeader>(REPLAY_INSERT, [
-				bigIds,
-			]);
+			await conn.beginTransaction();
 
-			if (result.affectedRows > 0) {
-				await conn.query(REPLAY_DELETE, [bigIds]);
-			}
+			try {
+				const bigIds = ids.map(BigInt);
+				const [result] = await conn.query<ResultSetHeader>(REPLAY_INSERT, [
+					bigIds,
+				]);
 
-			await conn.commit();
-			return result.affectedRows;
-		} catch (err) {
-			await conn.rollback();
-			if (
-				typeof err === "object" &&
-				err !== null &&
-				"errno" in err &&
-				(err as { errno: number }).errno === ER_DUP_ENTRY
-			) {
-				throw new SingletonCollisionError(
-					"Replay collides with a live singleton job",
-				);
+				if (result.affectedRows > 0) {
+					await conn.query(REPLAY_DELETE, [bigIds]);
+				}
+
+				await conn.commit();
+				return result.affectedRows;
+			} catch (err) {
+				await conn.rollback();
+				if (
+					typeof err === "object" &&
+					err !== null &&
+					"errno" in err &&
+					(err as { errno: number }).errno === ER_DUP_ENTRY
+				) {
+					throw new SingletonCollisionError(
+						"Replay collides with a live singleton job",
+					);
+				}
+				throw err;
 			}
-			throw err;
+		} finally {
+			conn.release();
 		}
-	} finally {
-		conn.release();
-	}
+	});
 }

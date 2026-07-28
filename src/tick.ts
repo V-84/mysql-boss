@@ -11,6 +11,7 @@ import {
 	TICK_ENQUEUE,
 	TICK_SELECT,
 } from "./sql.js";
+import { toUtcString } from "./util.js";
 
 interface ScheduleRow extends RowDataPacket {
 	name: string;
@@ -25,10 +26,11 @@ interface ScheduleRow extends RowDataPacket {
 		retryBackoff?: boolean;
 	} | null;
 	next_run_at: Date;
+	next_run_at_unix: number;
 }
 
 interface DbNowRow extends RowDataPacket {
-	db_now: Date;
+	db_now_unix: number;
 }
 
 export async function runTick(pool: Pool): Promise<number> {
@@ -38,7 +40,7 @@ export async function runTick(pool: Pool): Promise<number> {
 			await conn.beginTransaction();
 
 			const [nowRows] = await conn.query<DbNowRow[]>(DB_NOW);
-			const dbNow = nowRows[0].db_now;
+			const dbNow = new Date(nowRows[0].db_now_unix * 1000);
 
 			const [schedules] = await conn.query<ScheduleRow[]>(TICK_SELECT);
 
@@ -67,10 +69,11 @@ export async function runTick(pool: Pool): Promise<number> {
 				]);
 
 				const fields = parseCron(sched.cron);
-				const base = dbNow > sched.next_run_at ? dbNow : sched.next_run_at;
+				const nextRunAt = new Date(sched.next_run_at_unix * 1000);
+				const base = dbNow > nextRunAt ? dbNow : nextRunAt;
 				const nextRun = nextOccurrence(fields, base, sched.timezone);
 
-				await conn.query(TICK_ADVANCE, [nextRun, sched.name]);
+				await conn.query(TICK_ADVANCE, [toUtcString(nextRun), sched.name]);
 				fired++;
 			}
 
@@ -109,7 +112,7 @@ export async function upsertSchedule(
 		timezone,
 		payload ? JSON.stringify(payload) : null,
 		jobOptions ? JSON.stringify(jobOptions) : null,
-		nextRun,
+		toUtcString(nextRun),
 	]);
 }
 
