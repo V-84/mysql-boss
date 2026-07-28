@@ -2,6 +2,12 @@ import type { Pool } from "mysql2/promise";
 
 export interface MysqlBossOptions {
 	pool: Pool;
+	/**
+	 * Prefix for all queue tables. Defaults to "mysql_boss", producing
+	 * mysql_boss_jobs, mysql_boss_jobs_archive, mysql_boss_jobs_dead, and
+	 * mysql_boss_schedules. Set to "" to use the legacy unprefixed names.
+	 */
+	tablePrefix?: string;
 	pollIntervalMs?: number;
 	batchSize?: number;
 	concurrency?: number;

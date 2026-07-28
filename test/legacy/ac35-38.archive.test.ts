@@ -7,7 +7,7 @@ let pool: Pool;
 
 beforeAll(async () => {
 	pool = await createPool();
-	const boss = new MysqlBoss({ pool });
+	const boss = new MysqlBoss({ pool, tablePrefix: "" });
 	await boss.migrate();
 }, 30_000);
 

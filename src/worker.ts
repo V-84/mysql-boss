@@ -6,7 +6,7 @@ import { deadLetterJob } from "./dlq.js";
 import { failJob } from "./fail.js";
 import { heartbeatOwnedJobs } from "./heartbeat.js";
 import type { ActiveJob, JobHandler } from "./index.js";
-import { DRAIN_RELEASE } from "./sql.js";
+import type { SqlStatements } from "./sql.js";
 import { sweepStaleJobs } from "./sweep.js";
 
 interface WorkerConfig {
@@ -20,6 +20,7 @@ interface WorkerConfig {
 	sweepIntervalMs: number;
 	drainTimeoutMs: number;
 	onError: (err: unknown, context: string) => void;
+	sql: SqlStatements;
 }
 
 interface InFlightJob {
@@ -97,6 +98,7 @@ export class WorkerManager {
 				this.config.workerId,
 				batch,
 				this.config.leaseSeconds,
+				this.config.sql,
 			);
 
 			for (const job of jobs) {
@@ -157,7 +159,12 @@ export class WorkerManager {
 		if (abortController.signal.aborted) return;
 
 		try {
-			await completeJob(this.config.pool, job.id, this.config.workerId);
+			await completeJob(
+				this.config.pool,
+				job.id,
+				this.config.workerId,
+				this.config.sql,
+			);
 		} catch (error) {
 			this.reportError(error, "complete");
 		}
@@ -178,6 +185,7 @@ export class WorkerManager {
 			jobId,
 			this.config.workerId,
 			errorObj,
+			this.config.sql,
 		);
 
 		if (!retried) {
@@ -186,6 +194,7 @@ export class WorkerManager {
 				jobId,
 				this.config.workerId,
 				errorObj,
+				this.config.sql,
 			);
 		}
 	}
@@ -209,6 +218,7 @@ export class WorkerManager {
 				ids,
 				this.config.workerId,
 				this.config.leaseSeconds,
+				this.config.sql,
 			);
 
 			for (const entry of entries) {
@@ -223,7 +233,7 @@ export class WorkerManager {
 
 	private async sweep(): Promise<void> {
 		try {
-			await sweepStaleJobs(this.config.pool);
+			await sweepStaleJobs(this.config.pool, this.config.sql);
 		} catch (err) {
 			this.config.onError(err, "sweep");
 		}
@@ -276,7 +286,7 @@ export class WorkerManager {
 				if (stragglerIds.length > 0) {
 					try {
 						await withConnection(this.config.pool, async (connection) => {
-							await connection.query(DRAIN_RELEASE, [
+							await connection.query(this.config.sql.DRAIN_RELEASE, [
 								stragglerIds,
 								this.config.workerId,
 							]);

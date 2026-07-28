@@ -13,7 +13,7 @@ import type {
 	ScheduleOptions,
 } from "./index.js";
 import { migrate } from "./migrate.js";
-import { ENQUEUE, ENQUEUE_SINGLETON, LAST_INSERT_ID } from "./sql.js";
+import { type SqlStatements, createSql } from "./sql.js";
 import { deleteSchedule, runTick, upsertSchedule } from "./tick.js";
 import { toUtcString } from "./util.js";
 import { WorkerManager } from "./worker.js";
@@ -25,6 +25,7 @@ export class MysqlBoss {
 	private tickTimer: ReturnType<typeof setInterval> | null = null;
 	private pruneCounter = 0;
 	private stopped = false;
+	private sql: SqlStatements;
 
 	private pollIntervalMs: number;
 	private batchSize: number;
@@ -40,6 +41,13 @@ export class MysqlBoss {
 	constructor(opts: MysqlBossOptions) {
 		this.pool = opts.pool;
 		this.workerId = randomUUID();
+		try {
+			this.sql = createSql(opts.tablePrefix);
+		} catch (error) {
+			throw new ConfigError(
+				error instanceof Error ? error.message : "Invalid tablePrefix",
+			);
+		}
 
 		this.pollIntervalMs = opts.pollIntervalMs ?? 2000;
 		this.batchSize = opts.batchSize ?? 10;
@@ -69,7 +77,7 @@ export class MysqlBoss {
 	}
 
 	async migrate(): Promise<void> {
-		await migrate(this.pool);
+		await migrate(this.pool, this.sql);
 	}
 
 	async enqueue<T>(
@@ -107,7 +115,7 @@ export class MysqlBoss {
 		if (singletonKey !== null) {
 			return withConnection(this.pool, async (connection) => {
 				const [result] = await connection.query<ResultSetHeader>(
-					ENQUEUE_SINGLETON,
+					this.sql.ENQUEUE_SINGLETON,
 					[
 						queue,
 						priority,
@@ -120,29 +128,30 @@ export class MysqlBoss {
 					],
 				);
 				if (result.affectedRows === 0) return null;
-				const [rows] =
-					await connection.query<(RowDataPacket & { id: string })[]>(
-						LAST_INSERT_ID,
-					);
+				const [rows] = await connection.query<
+					(RowDataPacket & { id: string })[]
+				>(this.sql.LAST_INSERT_ID);
 				return rows[0].id;
 			});
 		}
 
 		return withConnection(this.pool, async (connection) => {
-			const [result] = await connection.query<ResultSetHeader>(ENQUEUE, [
-				queue,
-				priority,
-				payloadJson,
-				singletonKey,
-				retryLimit,
-				retryDelaySecs,
-				retryBackoff,
-				runAtParam,
-			]);
-			const [rows] =
-				await connection.query<(RowDataPacket & { id: string })[]>(
-					LAST_INSERT_ID,
-				);
+			const [result] = await connection.query<ResultSetHeader>(
+				this.sql.ENQUEUE,
+				[
+					queue,
+					priority,
+					payloadJson,
+					singletonKey,
+					retryLimit,
+					retryDelaySecs,
+					retryBackoff,
+					runAtParam,
+				],
+			);
+			const [rows] = await connection.query<(RowDataPacket & { id: string })[]>(
+				this.sql.LAST_INSERT_ID,
+			);
 			return rows[0].id;
 		});
 	}
@@ -164,6 +173,7 @@ export class MysqlBoss {
 				sweepIntervalMs: this.sweepIntervalMs,
 				drainTimeoutMs: this.drainTimeoutMs,
 				onError: this.onError,
+				sql: this.sql,
 			});
 			this.startTick();
 		}
@@ -176,11 +186,11 @@ export class MysqlBoss {
 		const jitter = 0.8 + Math.random() * 0.4;
 		this.tickTimer = setInterval(async () => {
 			try {
-				await runTick(this.pool);
+				await runTick(this.pool, this.sql);
 				this.pruneCounter++;
 				if (this.pruneCounter >= 10) {
 					this.pruneCounter = 0;
-					await pruneArchive(this.pool, this.archiveRetentionDays);
+					await pruneArchive(this.pool, this.archiveRetentionDays, this.sql);
 				}
 			} catch (err) {
 				this.onError(err, "tick");
@@ -212,11 +222,12 @@ export class MysqlBoss {
 			timezone,
 			payload,
 			jobOptions,
+			this.sql,
 		);
 	}
 
 	async unschedule(name: string): Promise<void> {
-		await deleteSchedule(this.pool, name);
+		await deleteSchedule(this.pool, name, this.sql);
 	}
 
 	async listDead(q: {
@@ -231,15 +242,15 @@ export class MysqlBoss {
 		const limit = q.limit ?? 50;
 		const offset = q.offset ?? 0;
 
-		return listDead(this.pool, q.queue, before, after, limit, offset);
+		return listDead(this.pool, q.queue, before, after, limit, offset, this.sql);
 	}
 
 	async replayDead(ids: string[]): Promise<number> {
-		return replayDead(this.pool, ids);
+		return replayDead(this.pool, ids, this.sql);
 	}
 
 	async getArchivedJob(id: string): Promise<ArchivedJob | null> {
-		return getArchivedJob(this.pool, id);
+		return getArchivedJob(this.pool, id, this.sql);
 	}
 
 	async listArchive(q: {
@@ -250,7 +261,7 @@ export class MysqlBoss {
 		const before = q.before ?? new Date("9999-12-31");
 		const limit = q.limit ?? 50;
 
-		return listArchive(this.pool, q.queue, before, limit);
+		return listArchive(this.pool, q.queue, before, limit, this.sql);
 	}
 
 	async stop(opts?: { drainTimeoutMs?: number }): Promise<void> {

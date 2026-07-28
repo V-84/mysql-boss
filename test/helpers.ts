@@ -25,6 +25,7 @@ export async function createBoss(
 ): Promise<MysqlBoss> {
 	const boss = new MysqlBoss({
 		pool,
+		tablePrefix: "",
 		pollIntervalMs: 200,
 		batchSize: 10,
 		leaseSeconds: 30,

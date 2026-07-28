@@ -3,13 +3,7 @@ import { acquireConnection, withConnection } from "./connection.js";
 import { SingletonCollisionError } from "./errors.js";
 import type { DeadJob } from "./index.js";
 import { withDeadlockRetry } from "./retry-util.js";
-import {
-	DLQ_DELETE,
-	DLQ_INSERT,
-	LIST_DEAD,
-	REPLAY_DELETE,
-	REPLAY_INSERT,
-} from "./sql.js";
+import { type SqlStatements, UNPREFIXED_SQL } from "./sql.js";
 import { toUtcString } from "./util.js";
 
 export async function deadLetterJob(
@@ -17,13 +11,14 @@ export async function deadLetterJob(
 	jobId: string,
 	workerId: string,
 	error: { message: string; stack?: string; at: string },
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<boolean> {
 	return withDeadlockRetry(async () => {
 		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
-			const [result] = await conn.query<ResultSetHeader>(DLQ_INSERT, [
+			const [result] = await conn.query<ResultSetHeader>(sql.DLQ_INSERT, [
 				JSON.stringify(error),
 				jobId,
 				workerId,
@@ -34,7 +29,7 @@ export async function deadLetterJob(
 				return false;
 			}
 
-			await conn.query(DLQ_DELETE, [jobId, workerId]);
+			await conn.query(sql.DLQ_DELETE, [jobId, workerId]);
 			await conn.commit();
 			return true;
 		} catch (err) {
@@ -64,9 +59,10 @@ export async function listDead(
 	after: Date,
 	limit: number,
 	offset: number,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<DeadJob[]> {
 	return withConnection(pool, async (connection) => {
-		const [rows] = await connection.query<DeadRow[]>(LIST_DEAD, [
+		const [rows] = await connection.query<DeadRow[]>(sql.LIST_DEAD, [
 			queue,
 			toUtcString(after),
 			toUtcString(before),
@@ -88,7 +84,11 @@ export async function listDead(
 
 const ER_DUP_ENTRY = 1062;
 
-export async function replayDead(pool: Pool, ids: string[]): Promise<number> {
+export async function replayDead(
+	pool: Pool,
+	ids: string[],
+	sql: SqlStatements = UNPREFIXED_SQL,
+): Promise<number> {
 	return withDeadlockRetry(async () => {
 		const conn = await acquireConnection(pool);
 		try {
@@ -96,12 +96,12 @@ export async function replayDead(pool: Pool, ids: string[]): Promise<number> {
 
 			try {
 				const bigIds = ids.map(BigInt);
-				const [result] = await conn.query<ResultSetHeader>(REPLAY_INSERT, [
+				const [result] = await conn.query<ResultSetHeader>(sql.REPLAY_INSERT, [
 					bigIds,
 				]);
 
 				if (result.affectedRows > 0) {
-					await conn.query(REPLAY_DELETE, [bigIds]);
+					await conn.query(sql.REPLAY_DELETE, [bigIds]);
 				}
 
 				await conn.commit();

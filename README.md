@@ -106,6 +106,7 @@ import type { Pool } from "mysql2/promise";
 
 interface MysqlBossOptions {
   pool: Pool;                    // Required. Your mysql2 promise pool.
+  tablePrefix?: string;          // Default: "mysql_boss". Set "" for legacy unprefixed table names.
   pollIntervalMs?: number;       // Default: 2000. How often to poll for jobs (ms). ±20% jitter applied.
   batchSize?: number;            // Default: 10. Jobs claimed per poll (1–100).
   concurrency?: number;          // Default: batchSize. Max in-flight jobs per worker.
@@ -122,6 +123,7 @@ interface MysqlBossOptions {
 - `leaseSeconds` must be >= `3 * heartbeatSeconds` (throws `ConfigError`)
 - `batchSize` must be between 1 and 100 (throws `ConfigError`)
 - `archiveRetentionDays` must be a positive integer (throws `ConfigError`)
+- `tablePrefix` may contain only ASCII letters, numbers, and underscores, up to 50 characters
 
 ```typescript
 // Example: low-latency config for small jobs
@@ -143,7 +145,19 @@ const boss = new MysqlBoss({
 await boss.migrate(): Promise<void>
 ```
 
-Creates all required tables (`jobs`, `jobs_archive`, `jobs_dead`, `schedules`) if they don't exist. **Idempotent** — safe to call on every app startup.
+Creates all required tables (`mysql_boss_jobs`, `mysql_boss_jobs_archive`, `mysql_boss_jobs_dead`, `mysql_boss_schedules` by default) if they don't exist. **Idempotent** — safe to call on every app startup.
+
+Use `tablePrefix` when multiple applications share a database:
+
+```typescript
+const boss = new MysqlBoss({ pool, tablePrefix: "billing" });
+await boss.migrate();
+// billing_jobs, billing_jobs_archive, billing_jobs_dead, billing_schedules
+```
+
+Set `tablePrefix: ""` to retain the original unprefixed table names. Changing the
+prefix points the instance at a different set of tables; it does not rename or
+migrate data from an existing set.
 
 ---
 
@@ -246,9 +260,9 @@ interface ActiveJob<T = unknown> {
 
 | Handler does | Result |
 |---|---|
-| Resolves (returns) | Job is **completed** and moved to `jobs_archive` |
+| Resolves (returns) | Job is **completed** and moved to the archive table |
 | Rejects (throws) with retries remaining | Job returns to queue with backoff delay |
-| Rejects (throws) with retries exhausted | Job moves to `jobs_dead` (dead-letter queue) |
+| Rejects (throws) with retries exhausted | Job moves to the dead-letter table |
 
 #### Examples
 
@@ -574,12 +588,12 @@ boss.work("charge-customer", async (job) => {
 
 | Table | Purpose | Size profile |
 |---|---|---|
-| `jobs` | Hot table — only pending and in-flight jobs | Backlog-sized (small) |
-| `jobs_archive` | Completed jobs — audit/history | Grows with throughput, pruned by retention |
-| `jobs_dead` | Failed jobs (retries exhausted) | Small unless something is broken |
-| `schedules` | Cron schedule definitions | Tiny |
+| `mysql_boss_jobs` | Hot table — only pending and in-flight jobs | Backlog-sized (small) |
+| `mysql_boss_jobs_archive` | Completed jobs — audit/history | Grows with throughput, pruned by retention |
+| `mysql_boss_jobs_dead` | Failed jobs (retries exhausted) | Small unless something is broken |
+| `mysql_boss_schedules` | Cron schedule definitions | Tiny |
 
-Completed jobs are **moved** out of `jobs` into `jobs_archive` on success (and into `jobs_dead` on permanent failure). This keeps the hot `jobs` table small and the dequeue index fast — MySQL has no partial indexes, so terminal rows left in `jobs` would bloat every claim scan.
+Completed jobs are **moved** out of the hot table into the archive table on success (and into the dead-letter table on permanent failure). This keeps the hot table small and the dequeue index fast — MySQL has no partial indexes, so terminal rows left in it would bloat every claim scan.
 
 ### How claims work
 
@@ -614,14 +628,14 @@ Every post-claim operation (`complete`, `fail`, `heartbeat`) includes `AND locke
 
 ## Archive retention and partitioning
 
-The `jobs_archive` table is pruned automatically based on `archiveRetentionDays` (default: 14 days). Pruning runs in batches of 5,000 rows to bound lock time.
+The archive table (`mysql_boss_jobs_archive` by default) is pruned automatically based on `archiveRetentionDays` (default: 14 days). Pruning runs in batches of 5,000 rows to bound lock time.
 
 ### For high-throughput or long-retention setups
 
-If you keep archives for 90+ days or process millions of jobs, consider partitioning the `jobs_archive` table by `completed_at` (monthly partitions). This turns retention cleanup from batched DELETEs into instant `ALTER TABLE ... DROP PARTITION`:
+If you keep archives for 90+ days or process millions of jobs, consider partitioning your configured archive table by `completed_at` (monthly partitions). This turns retention cleanup from batched DELETEs into instant `ALTER TABLE ... DROP PARTITION`:
 
 ```sql
-ALTER TABLE jobs_archive
+ALTER TABLE mysql_boss_jobs_archive
 PARTITION BY RANGE (TO_DAYS(completed_at)) (
   PARTITION p202501 VALUES LESS THAN (TO_DAYS('2025-02-01')),
   PARTITION p202502 VALUES LESS THAN (TO_DAYS('2025-03-01')),

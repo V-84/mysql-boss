@@ -32,7 +32,7 @@ let pool: Pool;
 
 beforeAll(async () => {
 	pool = await createPool();
-	await new MysqlBoss({ pool }).migrate();
+	await new MysqlBoss({ pool, tablePrefix: "" }).migrate();
 });
 
 beforeEach(async () => {
@@ -47,7 +47,7 @@ afterAll(async () => {
 
 describe("Implementation spec acceptance criteria 1-8", () => {
 	it("AC 1: migrate twice produces no error and no schema diff", async () => {
-		const boss = new MysqlBoss({ pool });
+		const boss = new MysqlBoss({ pool, tablePrefix: "" });
 		await boss.migrate();
 		const tables = ["jobs", "jobs_archive", "jobs_dead", "schedules"];
 		const before: Record<string, string> = {};
@@ -109,6 +109,7 @@ describe("Implementation spec acceptance criteria 1-8", () => {
 				const workerPool = await createPool();
 				const boss = new MysqlBoss({
 					pool: workerPool,
+					tablePrefix: "",
 					pollIntervalMs: 10,
 					batchSize: 100,
 					concurrency: 100,
@@ -260,7 +261,7 @@ describe("Implementation spec acceptance criteria 1-8", () => {
 			connection.release();
 		}
 
-		const boss = new MysqlBoss({ pool: isolatedPool });
+		const boss = new MysqlBoss({ pool: isolatedPool, tablePrefix: "" });
 		await boss.migrate();
 		await Promise.all([
 			boss.enqueue("ac8", { index: 1 }),

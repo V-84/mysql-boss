@@ -13,6 +13,7 @@ const pool = mysql.createPool({
 
 const boss = new MysqlBoss({
 	pool,
+	tablePrefix: "",
 	pollIntervalMs: 20,
 	batchSize: 1,
 	concurrency: 1,

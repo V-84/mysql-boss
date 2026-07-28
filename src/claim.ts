@@ -2,7 +2,7 @@ import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { acquireConnection } from "./connection.js";
 import type { ActiveJob } from "./index.js";
 import { withDeadlockRetry } from "./retry-util.js";
-import { CLAIM_SELECT, CLAIM_UPDATE } from "./sql.js";
+import { type SqlStatements, UNPREFIXED_SQL } from "./sql.js";
 
 interface ClaimRow extends RowDataPacket {
 	id: string;
@@ -20,13 +20,14 @@ export async function claimJobs(
 	workerId: string,
 	batchSize: number,
 	leaseSeconds: number,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<ActiveJob[]> {
 	return withDeadlockRetry(async () => {
 		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
-			const [rows] = await conn.query<ClaimRow[]>(CLAIM_SELECT, [
+			const [rows] = await conn.query<ClaimRow[]>(sql.CLAIM_SELECT, [
 				queue,
 				batchSize,
 			]);
@@ -37,7 +38,7 @@ export async function claimJobs(
 			}
 
 			const ids = rows.map((r) => r.id);
-			const [result] = await conn.query<ResultSetHeader>(CLAIM_UPDATE, [
+			const [result] = await conn.query<ResultSetHeader>(sql.CLAIM_UPDATE, [
 				workerId,
 				leaseSeconds,
 				ids,

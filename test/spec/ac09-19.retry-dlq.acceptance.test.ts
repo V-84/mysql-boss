@@ -55,7 +55,7 @@ let pool: Pool;
 
 beforeAll(async () => {
 	pool = await createPool();
-	await new MysqlBoss({ pool }).migrate();
+	await new MysqlBoss({ pool, tablePrefix: "" }).migrate();
 });
 
 beforeEach(async () => {

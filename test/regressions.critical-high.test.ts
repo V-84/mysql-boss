@@ -56,7 +56,7 @@ describe("critical/high regression coverage", () => {
 			"SET SESSION transaction_isolation = 'REPEATABLE-READ', SESSION time_zone = 'SYSTEM'",
 		);
 
-		const boss = new MysqlBoss({ pool });
+		const boss = new MysqlBoss({ pool, tablePrefix: "" });
 		await boss.migrate();
 		await boss.enqueue("preused-connection", {});
 

@@ -369,3 +369,91 @@ export const INIT_SESSION = `
 SET SESSION transaction_isolation = 'READ-COMMITTED',
             SESSION time_zone = '+00:00';
 `;
+
+export const DEFAULT_TABLE_PREFIX = "mysql_boss";
+
+export const UNPREFIXED_SQL = {
+	CREATE_JOBS,
+	CREATE_JOBS_ARCHIVE,
+	CREATE_JOBS_DEAD,
+	CREATE_SCHEDULES,
+	ENQUEUE,
+	ENQUEUE_SINGLETON,
+	LAST_INSERT_ID,
+	CLAIM_SELECT,
+	CLAIM_UPDATE,
+	COMPLETE_ARCHIVE,
+	COMPLETE_DELETE,
+	FAIL_RETRY,
+	DLQ_INSERT,
+	DLQ_DELETE,
+	LIST_DEAD,
+	REPLAY_INSERT,
+	REPLAY_DELETE,
+	DB_NOW,
+	TICK_SELECT,
+	TICK_ENQUEUE,
+	TICK_ADVANCE,
+	SCHEDULE_UPSERT,
+	SCHEDULE_DELETE,
+	HEARTBEAT,
+	HEARTBEAT_OWNED,
+	DRAIN_RELEASE,
+	SWEEP_SELECT,
+	SWEEP_RETRY,
+	SWEEP_DLQ_INSERT,
+	SWEEP_DLQ_DELETE,
+	ARCHIVE_PRUNE,
+	GET_ARCHIVED_JOB,
+	LIST_ARCHIVE,
+} as const;
+
+export type SqlStatements = {
+	[K in keyof typeof UNPREFIXED_SQL]: string;
+};
+
+const TABLE_SUFFIXES = [
+	"jobs_archive",
+	"jobs_dead",
+	"schedules",
+	"jobs",
+] as const;
+
+/**
+ * Builds the SQL used by one MysqlBoss instance.
+ *
+ * Prefixes are deliberately limited to portable identifier characters. This
+ * lets us quote every generated table name safely instead of interpolating an
+ * arbitrary SQL identifier.
+ */
+export function createSql(tablePrefix = DEFAULT_TABLE_PREFIX): SqlStatements {
+	if (!/^[A-Za-z0-9_]*$/.test(tablePrefix)) {
+		throw new Error(
+			"tablePrefix may contain only ASCII letters, numbers, and underscores",
+		);
+	}
+	if (tablePrefix.length > 50) {
+		throw new Error("tablePrefix must be 50 characters or fewer");
+	}
+
+	const tableName = (suffix: (typeof TABLE_SUFFIXES)[number]): string =>
+		`\`${tablePrefix ? `${tablePrefix}_${suffix}` : suffix}\``;
+
+	const prefixTables = (statement: string): string => {
+		let result = statement;
+		for (const suffix of TABLE_SUFFIXES) {
+			result = result.replace(
+				new RegExp(`\\b${suffix}\\b`, "g"),
+				tableName(suffix),
+			);
+		}
+		return result;
+	};
+
+	return Object.fromEntries(
+		Object.entries(UNPREFIXED_SQL).map(([name, statement]) => [
+			name,
+			prefixTables(statement),
+		]),
+	) as SqlStatements;
+}

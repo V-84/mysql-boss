@@ -7,7 +7,7 @@ let pool: Pool;
 
 beforeAll(async () => {
 	pool = await createPool();
-	const boss = new MysqlBoss({ pool });
+	const boss = new MysqlBoss({ pool, tablePrefix: "" });
 	await boss.migrate();
 }, 30_000);
 
@@ -21,13 +21,13 @@ beforeEach(async () => {
 
 describe("Legacy coverage: migrate() idempotent", () => {
 	it("running migrate() twice produces no error", async () => {
-		const boss = new MysqlBoss({ pool });
+		const boss = new MysqlBoss({ pool, tablePrefix: "" });
 		await boss.migrate();
 		await boss.migrate();
 	});
 
 	it("tables exist after migration", async () => {
-		const boss = new MysqlBoss({ pool });
+		const boss = new MysqlBoss({ pool, tablePrefix: "" });
 		await boss.migrate();
 
 		const [tables] = await pool.query<RowDataPacket[]>(
@@ -96,6 +96,7 @@ describe("Legacy coverage: exactly-once under contention", () => {
 			const workerPool = await createPool();
 			const worker = new MysqlBoss({
 				pool: workerPool,
+				tablePrefix: "",
 				pollIntervalMs: 50,
 				batchSize: 20,
 				concurrency: 20,
@@ -212,6 +213,7 @@ describe("Legacy coverage: concurrent claims no overlap", () => {
 		const pool2 = await createPool();
 		const boss2 = new MysqlBoss({
 			pool: pool2,
+			tablePrefix: "",
 			pollIntervalMs: 50,
 			batchSize: 10,
 			concurrency: 10,

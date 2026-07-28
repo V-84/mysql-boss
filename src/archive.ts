@@ -2,26 +2,21 @@ import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { acquireConnection, withConnection } from "./connection.js";
 import type { ArchivedJob } from "./index.js";
 import { withDeadlockRetry } from "./retry-util.js";
-import {
-	ARCHIVE_PRUNE,
-	COMPLETE_ARCHIVE,
-	COMPLETE_DELETE,
-	GET_ARCHIVED_JOB,
-	LIST_ARCHIVE,
-} from "./sql.js";
+import { type SqlStatements, UNPREFIXED_SQL } from "./sql.js";
 import { toUtcString } from "./util.js";
 
 export async function completeJob(
 	pool: Pool,
 	jobId: string,
 	workerId: string,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<boolean> {
 	return withDeadlockRetry(async () => {
 		const conn = await acquireConnection(pool);
 		try {
 			await conn.beginTransaction();
 
-			const [result] = await conn.query<ResultSetHeader>(COMPLETE_ARCHIVE, [
+			const [result] = await conn.query<ResultSetHeader>(sql.COMPLETE_ARCHIVE, [
 				jobId,
 				workerId,
 			]);
@@ -31,7 +26,7 @@ export async function completeJob(
 				return false;
 			}
 
-			await conn.query(COMPLETE_DELETE, [jobId, workerId]);
+			await conn.query(sql.COMPLETE_DELETE, [jobId, workerId]);
 
 			await conn.commit();
 			return true;
@@ -78,9 +73,12 @@ function mapArchiveRow(row: ArchiveRow): ArchivedJob {
 export async function getArchivedJob(
 	pool: Pool,
 	id: string,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<ArchivedJob | null> {
 	return withConnection(pool, async (connection) => {
-		const [rows] = await connection.query<ArchiveRow[]>(GET_ARCHIVED_JOB, [id]);
+		const [rows] = await connection.query<ArchiveRow[]>(sql.GET_ARCHIVED_JOB, [
+			id,
+		]);
 		if (rows.length === 0) return null;
 		return mapArchiveRow(rows[0]);
 	});
@@ -91,9 +89,10 @@ export async function listArchive(
 	queue: string,
 	before: Date,
 	limit: number,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<ArchivedJob[]> {
 	return withConnection(pool, async (connection) => {
-		const [rows] = await connection.query<ArchiveRow[]>(LIST_ARCHIVE, [
+		const [rows] = await connection.query<ArchiveRow[]>(sql.LIST_ARCHIVE, [
 			queue,
 			toUtcString(before),
 			limit,
@@ -105,13 +104,15 @@ export async function listArchive(
 export async function pruneArchive(
 	pool: Pool,
 	retentionDays: number,
+	sql: SqlStatements = UNPREFIXED_SQL,
 ): Promise<void> {
 	await withConnection(pool, async (connection) => {
 		let deleted: number;
 		do {
-			const [result] = await connection.query<ResultSetHeader>(ARCHIVE_PRUNE, [
-				retentionDays,
-			]);
+			const [result] = await connection.query<ResultSetHeader>(
+				sql.ARCHIVE_PRUNE,
+				[retentionDays],
+			);
 			deleted = result.affectedRows;
 		} while (deleted >= 5000);
 	});
