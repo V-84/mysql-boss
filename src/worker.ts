@@ -220,9 +220,15 @@ export class WorkerManager {
 					entry.abortController.abort();
 				}
 
-				await Promise.allSettled(
-					[...this.inFlight.values()].map((j) => j.promise),
-				);
+				// Brief grace period for handlers to react to abort
+				const grace = new Promise<void>((r) => {
+					const t = setTimeout(r, 1000);
+					t.unref();
+				});
+				await Promise.race([
+					Promise.allSettled([...this.inFlight.values()].map((j) => j.promise)),
+					grace,
+				]);
 
 				const stragglers = [...this.inFlight.values()];
 				if (stragglers.length > 0) {
