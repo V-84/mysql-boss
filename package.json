@@ -53,8 +53,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
-    "@testcontainers/mysql": "^10.13.0",
-    "testcontainers": "^10.13.0",
     "typescript": "^7.0.2",
     "vitest": "^2.1.0"
   }
