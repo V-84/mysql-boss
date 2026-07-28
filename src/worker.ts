@@ -1,12 +1,12 @@
 import type { Pool } from "mysql2/promise";
-import type { ActiveJob, JobHandler } from "./index.js";
-import { claimJobs } from "./claim.js";
 import { completeJob } from "./archive.js";
-import { failJob } from "./fail.js";
+import { claimJobs } from "./claim.js";
 import { deadLetterJob } from "./dlq.js";
+import { failJob } from "./fail.js";
 import { sendHeartbeat } from "./heartbeat.js";
-import { sweepStaleJobs } from "./sweep.js";
+import type { ActiveJob, JobHandler } from "./index.js";
 import { DRAIN_RELEASE } from "./sql.js";
+import { sweepStaleJobs } from "./sweep.js";
 
 interface WorkerConfig {
 	pool: Pool;
@@ -60,10 +60,7 @@ export class WorkerManager {
 		if (!this.sweepTimer) {
 			const jitteredInterval =
 				this.config.sweepIntervalMs * (0.8 + Math.random() * 0.4);
-			this.sweepTimer = setInterval(
-				() => this.sweep(),
-				jitteredInterval,
-			);
+			this.sweepTimer = setInterval(() => this.sweep(), jitteredInterval);
 			this.sweepTimer.unref();
 		}
 	}
@@ -132,11 +129,7 @@ export class WorkerManager {
 			try {
 				await handler(job, { signal: ac.signal });
 				if (!ac.signal.aborted) {
-					await completeJob(
-						this.config.pool,
-						job.id,
-						this.config.workerId,
-					);
+					await completeJob(this.config.pool, job.id, this.config.workerId);
 				}
 			} catch (err) {
 				if (ac.signal.aborted) return;
@@ -236,7 +229,7 @@ export class WorkerManager {
 					const ids = stragglers.map((j) => j.jobIdBigint);
 					try {
 						await this.config.pool.query(DRAIN_RELEASE, [
-							[ids],
+							ids,
 							this.config.workerId,
 						]);
 					} catch {

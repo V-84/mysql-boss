@@ -9,12 +9,28 @@ export interface CronFields {
 }
 
 const MONTH_NAMES: Record<string, number> = {
-	jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-	jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+	jan: 1,
+	feb: 2,
+	mar: 3,
+	apr: 4,
+	may: 5,
+	jun: 6,
+	jul: 7,
+	aug: 8,
+	sep: 9,
+	oct: 10,
+	nov: 11,
+	dec: 12,
 };
 
 const DOW_NAMES: Record<string, number> = {
-	sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+	sun: 0,
+	mon: 1,
+	tue: 2,
+	wed: 3,
+	thu: 4,
+	fri: 5,
+	sat: 6,
 };
 
 function parseField(
@@ -26,13 +42,13 @@ function parseField(
 	const result = new Set<number>();
 
 	for (const part of field.split(",")) {
-		let stepParts = part.split("/");
+		const stepParts = part.split("/");
 		const step = stepParts.length > 1 ? Number.parseInt(stepParts[1], 10) : 1;
 		if (Number.isNaN(step) || step < 1) {
 			throw new Error(`Invalid step in cron field: ${part}`);
 		}
 
-		let rangePart = stepParts[0];
+		const rangePart = stepParts[0];
 
 		if (rangePart === "*") {
 			for (let i = min; i <= max; i += step) {

@@ -1,6 +1,6 @@
 import type { Pool, ResultSetHeader } from "mysql2/promise";
-import { FAIL_RETRY } from "./sql.js";
 import { withDeadlockRetry } from "./retry-util.js";
+import { FAIL_RETRY } from "./sql.js";
 
 export async function failJob(
 	pool: Pool,

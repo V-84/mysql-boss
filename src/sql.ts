@@ -210,7 +210,7 @@ DELETE FROM jobs_dead WHERE id IN (?);
 
 // §4.2 — Cron tick
 
-export const DB_NOW = `SELECT UTC_TIMESTAMP(6) AS db_now;`;
+export const DB_NOW = "SELECT UTC_TIMESTAMP(6) AS db_now;";
 
 export const TICK_SELECT = `
 SELECT name, queue, cron, timezone, payload, job_options, next_run_at
@@ -340,5 +340,6 @@ LIMIT ?;
 
 // Connection setup
 
-export const SET_READ_COMMITTED = `SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;`;
+export const SET_READ_COMMITTED =
+	"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;";
 export const SET_UTC_TIMEZONE = `SET SESSION time_zone = '+00:00';`;

@@ -1,23 +1,37 @@
 import { randomUUID } from "node:crypto";
-import type { Pool, PoolConnection, ResultSetHeader } from "mysql2/promise";
-import { ConfigError, ValidationError, SingletonCollisionError } from "./errors.js";
-import { migrate } from "./migrate.js";
-import { ENQUEUE, ENQUEUE_SINGLETON, SET_READ_COMMITTED, SET_UTC_TIMEZONE } from "./sql.js";
+import type { Pool, ResultSetHeader } from "mysql2/promise";
+import {
+	completeJob,
+	getArchivedJob,
+	listArchive,
+	pruneArchive,
+} from "./archive.js";
 import { claimJobs } from "./claim.js";
-import { completeJob, getArchivedJob, listArchive, pruneArchive } from "./archive.js";
-import { failJob } from "./fail.js";
 import { deadLetterJob, listDead, replayDead } from "./dlq.js";
-import { WorkerManager } from "./worker.js";
-import { runTick, upsertSchedule, deleteSchedule } from "./tick.js";
+import {
+	ConfigError,
+	SingletonCollisionError,
+	ValidationError,
+} from "./errors.js";
+import { failJob } from "./fail.js";
 import type {
-	MysqlBossOptions,
-	EnqueueOptions,
 	ActiveJob,
-	JobHandler,
-	DeadJob,
 	ArchivedJob,
+	DeadJob,
+	EnqueueOptions,
+	JobHandler,
+	MysqlBossOptions,
 	ScheduleOptions,
 } from "./index.js";
+import { migrate } from "./migrate.js";
+import {
+	ENQUEUE,
+	ENQUEUE_SINGLETON,
+	SET_READ_COMMITTED,
+	SET_UTC_TIMEZONE,
+} from "./sql.js";
+import { deleteSchedule, runTick, upsertSchedule } from "./tick.js";
+import { WorkerManager } from "./worker.js";
 
 export class MysqlBoss {
 	private pool: Pool;
@@ -59,7 +73,10 @@ export class MysqlBoss {
 				`leaseSeconds (${this.leaseSeconds}) must be >= 3 × heartbeatSeconds (${this.heartbeatSeconds})`,
 			);
 		}
-		if (this.archiveRetentionDays < 1 || !Number.isInteger(this.archiveRetentionDays)) {
+		if (
+			this.archiveRetentionDays < 1 ||
+			!Number.isInteger(this.archiveRetentionDays)
+		) {
 			throw new ConfigError("archiveRetentionDays must be an integer >= 1");
 		}
 
@@ -67,12 +84,10 @@ export class MysqlBoss {
 	}
 
 	private setupConnectionInit(): void {
-		const origGetConnection = this.pool.getConnection.bind(this.pool);
-		const pool = this.pool;
-
-		pool.on("connection", (conn: PoolConnection) => {
-			conn.query(SET_READ_COMMITTED).catch(() => {});
-			conn.query(SET_UTC_TIMEZONE).catch(() => {});
+		// biome-ignore lint/suspicious/noExplicitAny: mysql2 promise pool doesn't expose the underlying callback pool type
+		(this.pool as any).pool.on("connection", (conn: any) => {
+			conn.query(SET_READ_COMMITTED, () => {});
+			conn.query(SET_UTC_TIMEZONE, () => {});
 		});
 	}
 
@@ -116,8 +131,14 @@ export class MysqlBoss {
 			const [result] = await this.pool.query<ResultSetHeader>(
 				ENQUEUE_SINGLETON,
 				[
-					queue, priority, payloadJson, singletonKey,
-					retryLimit, retryDelaySecs, retryBackoff, runAtParam,
+					queue,
+					priority,
+					payloadJson,
+					singletonKey,
+					retryLimit,
+					retryDelaySecs,
+					retryBackoff,
+					runAtParam,
 				],
 			);
 			if (result.affectedRows === 0) return null;
@@ -125,8 +146,14 @@ export class MysqlBoss {
 		}
 
 		const [result] = await this.pool.query<ResultSetHeader>(ENQUEUE, [
-			queue, priority, payloadJson, singletonKey,
-			retryLimit, retryDelaySecs, retryBackoff, runAtParam,
+			queue,
+			priority,
+			payloadJson,
+			singletonKey,
+			retryLimit,
+			retryDelaySecs,
+			retryBackoff,
+			runAtParam,
 		]);
 		return result.insertId.toString();
 	}

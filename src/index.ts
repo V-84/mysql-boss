@@ -65,4 +65,8 @@ export interface ScheduleOptions
 }
 
 export { MysqlBoss } from "./boss.js";
-export { ConfigError, ValidationError, SingletonCollisionError } from "./errors.js";
+export {
+	ConfigError,
+	ValidationError,
+	SingletonCollisionError,
+} from "./errors.js";

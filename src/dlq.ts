@@ -1,6 +1,7 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import type { DeadJob } from "./index.js";
 import { SingletonCollisionError } from "./errors.js";
+import type { DeadJob } from "./index.js";
+import { withDeadlockRetry } from "./retry-util.js";
 import {
 	DLQ_DELETE,
 	DLQ_INSERT,
@@ -8,7 +9,6 @@ import {
 	REPLAY_DELETE,
 	REPLAY_INSERT,
 } from "./sql.js";
-import { withDeadlockRetry } from "./retry-util.js";
 
 export async function deadLetterJob(
 	pool: Pool,
@@ -84,21 +84,19 @@ export async function listDead(
 
 const ER_DUP_ENTRY = 1062;
 
-export async function replayDead(
-	pool: Pool,
-	ids: string[],
-): Promise<number> {
+export async function replayDead(pool: Pool, ids: string[]): Promise<number> {
 	const conn = await pool.getConnection();
 	try {
 		await conn.beginTransaction();
 
 		try {
+			const bigIds = ids.map(BigInt);
 			const [result] = await conn.query<ResultSetHeader>(REPLAY_INSERT, [
-				[ids.map(BigInt)],
+				bigIds,
 			]);
 
 			if (result.affectedRows > 0) {
-				await conn.query(REPLAY_DELETE, [[ids.map(BigInt)]]);
+				await conn.query(REPLAY_DELETE, [bigIds]);
 			}
 
 			await conn.commit();

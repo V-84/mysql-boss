@@ -1,5 +1,6 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type { ArchivedJob } from "./index.js";
+import { withDeadlockRetry } from "./retry-util.js";
 import {
 	ARCHIVE_PRUNE,
 	COMPLETE_ARCHIVE,
@@ -7,7 +8,6 @@ import {
 	GET_ARCHIVED_JOB,
 	LIST_ARCHIVE,
 } from "./sql.js";
-import { withDeadlockRetry } from "./retry-util.js";
 
 export async function completeJob(
 	pool: Pool,

@@ -1,16 +1,16 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import type { EnqueueOptions } from "./index.js";
-import { parseCron } from "./cron/parse.js";
 import { nextOccurrence } from "./cron/next.js";
+import { parseCron } from "./cron/parse.js";
+import type { EnqueueOptions } from "./index.js";
+import { withDeadlockRetry } from "./retry-util.js";
 import {
 	DB_NOW,
-	TICK_SELECT,
-	TICK_ENQUEUE,
-	TICK_ADVANCE,
-	SCHEDULE_UPSERT,
 	SCHEDULE_DELETE,
+	SCHEDULE_UPSERT,
+	TICK_ADVANCE,
+	TICK_ENQUEUE,
+	TICK_SELECT,
 } from "./sql.js";
-import { withDeadlockRetry } from "./retry-util.js";
 
 interface ScheduleRow extends RowDataPacket {
 	name: string;
@@ -67,8 +67,7 @@ export async function runTick(pool: Pool): Promise<number> {
 				]);
 
 				const fields = parseCron(sched.cron);
-				const base =
-					dbNow > sched.next_run_at ? dbNow : sched.next_run_at;
+				const base = dbNow > sched.next_run_at ? dbNow : sched.next_run_at;
 				const nextRun = nextOccurrence(fields, base, sched.timezone);
 
 				await conn.query(TICK_ADVANCE, [nextRun, sched.name]);
@@ -114,9 +113,6 @@ export async function upsertSchedule(
 	]);
 }
 
-export async function deleteSchedule(
-	pool: Pool,
-	name: string,
-): Promise<void> {
+export async function deleteSchedule(pool: Pool, name: string): Promise<void> {
 	await pool.query(SCHEDULE_DELETE, [name]);
 }

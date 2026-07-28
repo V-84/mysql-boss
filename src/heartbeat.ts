@@ -10,7 +10,7 @@ export async function sendHeartbeat(
 	if (jobIds.length === 0) return 0;
 	const [result] = await pool.query<ResultSetHeader>(HEARTBEAT, [
 		leaseSeconds,
-		[jobIds],
+		jobIds,
 		workerId,
 	]);
 	return result.affectedRows;

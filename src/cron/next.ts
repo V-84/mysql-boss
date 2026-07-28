@@ -3,7 +3,14 @@ import type { CronFields } from "./parse.js";
 function getLocalParts(
 	dt: Date,
 	tz: string,
-): { year: number; month: number; day: number; hour: number; minute: number; dow: number } {
+): {
+	year: number;
+	month: number;
+	day: number;
+	hour: number;
+	minute: number;
+	dow: number;
+} {
 	const fmt = new Intl.DateTimeFormat("en-US", {
 		timeZone: tz,
 		year: "numeric",
@@ -19,7 +26,13 @@ function getLocalParts(
 		Number(parts.find((p) => p.type === type)?.value ?? 0);
 
 	const dowMap: Record<string, number> = {
-		Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+		Sun: 0,
+		Mon: 1,
+		Tue: 2,
+		Wed: 3,
+		Thu: 4,
+		Fri: 5,
+		Sat: 6,
 	};
 	const dowStr = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
 

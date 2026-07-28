@@ -1,7 +1,7 @@
 import type { Pool, RowDataPacket } from "mysql2/promise";
 import type { ActiveJob } from "./index.js";
-import { CLAIM_SELECT, CLAIM_UPDATE } from "./sql.js";
 import { withDeadlockRetry } from "./retry-util.js";
+import { CLAIM_SELECT, CLAIM_UPDATE } from "./sql.js";
 
 interface ClaimRow extends RowDataPacket {
 	id: bigint;
@@ -36,7 +36,7 @@ export async function claimJobs(
 			}
 
 			const ids = rows.map((r) => r.id);
-			await conn.query(CLAIM_UPDATE, [workerId, leaseSeconds, [ids]]);
+			await conn.query(CLAIM_UPDATE, [workerId, leaseSeconds, ids]);
 
 			await conn.commit();
 
