@@ -17,7 +17,7 @@ afterAll(async () => {
 	await pool.end();
 });
 
-describe("AC 14: listDead returns dead-lettered jobs", () => {
+describe("Legacy coverage: listDead returns dead-lettered jobs", () => {
 	it("returns dead jobs for a queue with correct fields", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-14";
@@ -43,7 +43,7 @@ describe("AC 14: listDead returns dead-lettered jobs", () => {
 	}, 10000);
 });
 
-describe("AC 15: listDead pagination", () => {
+describe("Legacy coverage: listDead pagination", () => {
 	it("supports limit and offset for paging through dead jobs", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-15";
@@ -75,7 +75,7 @@ describe("AC 15: listDead pagination", () => {
 	}, 10000);
 });
 
-describe("AC 16: listDead date filtering", () => {
+describe("Legacy coverage: listDead date filtering", () => {
 	it("filters dead jobs by before/after dates", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-16";
@@ -107,7 +107,7 @@ describe("AC 16: listDead date filtering", () => {
 	}, 10000);
 });
 
-describe("AC 17: replayDead moves jobs back to available", () => {
+describe("Legacy coverage: replayDead moves jobs back to available", () => {
 	it("replays dead jobs back into the jobs table", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-17";
@@ -142,7 +142,7 @@ describe("AC 17: replayDead moves jobs back to available", () => {
 	}, 10000);
 });
 
-describe("AC 18: replayDead with multiple IDs", () => {
+describe("Legacy coverage: replayDead with multiple IDs", () => {
 	it("replays multiple dead jobs at once", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-18";
@@ -170,7 +170,7 @@ describe("AC 18: replayDead with multiple IDs", () => {
 	}, 10000);
 });
 
-describe("AC 19: replayDead throws SingletonCollisionError", () => {
+describe("Legacy coverage: replayDead throws SingletonCollisionError", () => {
 	it("throws when replaying a dead job would collide with a live singleton", async () => {
 		const boss = await createBoss(pool);
 		const queue = "dlq-q-19";

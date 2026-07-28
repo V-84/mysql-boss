@@ -17,7 +17,7 @@ afterAll(async () => {
 	await pool.end();
 });
 
-describe("AC 26: higher priority jobs are claimed first", () => {
+describe("Legacy coverage: higher priority jobs are claimed first", () => {
 	it("claims jobs in priority DESC, run_at, id order", async () => {
 		const boss = await createBoss(pool, { batchSize: 1 });
 		const queue = "priority-q-26";
@@ -41,7 +41,7 @@ describe("AC 26: higher priority jobs are claimed first", () => {
 	}, 10000);
 });
 
-describe("AC 27: priority validation", () => {
+describe("Legacy coverage: priority validation", () => {
 	it("rejects priority outside SMALLINT range", async () => {
 		const boss = await createBoss(pool);
 
@@ -75,7 +75,7 @@ describe("AC 27: priority validation", () => {
 	}, 5000);
 });
 
-describe("AC 28: default priority is 0", () => {
+describe("Legacy coverage: default priority is 0", () => {
 	it("jobs without explicit priority get priority 0", async () => {
 		const boss = await createBoss(pool, { batchSize: 1 });
 		const queue = "priority-q-28";

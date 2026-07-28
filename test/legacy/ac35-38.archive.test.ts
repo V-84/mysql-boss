@@ -19,7 +19,7 @@ beforeEach(async () => {
 	await cleanTables(pool);
 });
 
-describe("AC 35: archive on successful completion", () => {
+describe("Legacy coverage: archive on successful completion", () => {
 	it("successful completion moves the row atomically to jobs_archive with duration_ms", async () => {
 		const boss = await createBoss(pool);
 
@@ -57,7 +57,7 @@ describe("AC 35: archive on successful completion", () => {
 	});
 });
 
-describe("AC 36: getArchivedJob", () => {
+describe("Legacy coverage: getArchivedJob", () => {
 	it("returns the record for an archived id", async () => {
 		const boss = await createBoss(pool);
 		const jobId = await boss.enqueue("get-archive-q", { key: "value" });
@@ -87,7 +87,7 @@ describe("AC 36: getArchivedJob", () => {
 	});
 });
 
-describe("AC 37: listArchive keyset pagination uses range scan", () => {
+describe("Legacy coverage: listArchive keyset pagination uses range scan", () => {
 	it("paginates correctly with keyset pagination", async () => {
 		const boss = await createBoss(pool);
 
@@ -138,7 +138,7 @@ describe("AC 37: listArchive keyset pagination uses range scan", () => {
 	});
 });
 
-describe("AC 38: archive retention prune", () => {
+describe("Legacy coverage: archive retention prune", () => {
 	it("deletes only rows older than archiveRetentionDays in batches <= 5000", async () => {
 		const boss = await createBoss(pool, { archiveRetentionDays: 1 });
 

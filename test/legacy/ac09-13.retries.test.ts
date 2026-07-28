@@ -39,7 +39,7 @@ afterAll(async () => {
 	await pool.end();
 });
 
-describe("AC 9: failed job re-enters available with incremented retry_count", () => {
+describe("Legacy coverage: failed job re-enters available with incremented retry_count", () => {
 	it("retries a failed job with retry_count incremented", async () => {
 		const boss = await createBoss(pool);
 		const queue = "retry-q-9";
@@ -78,7 +78,7 @@ describe("AC 9: failed job re-enters available with incremented retry_count", ()
 	}, 15000);
 });
 
-describe("AC 10: exponential backoff", () => {
+describe("Legacy coverage: exponential backoff", () => {
 	it("applies delay * 2^retry_count when retryBackoff=true", async () => {
 		const boss = await createBoss(pool);
 		const queue = "retry-q-10";
@@ -126,7 +126,7 @@ describe("AC 10: exponential backoff", () => {
 	}, 10000);
 });
 
-describe("AC 11: linear backoff", () => {
+describe("Legacy coverage: linear backoff", () => {
 	it("applies flat retry_delay_secs when retryBackoff=false", async () => {
 		const boss = await createBoss(pool);
 		const queue = "retry-q-11";
@@ -170,7 +170,7 @@ describe("AC 11: linear backoff", () => {
 	}, 10000);
 });
 
-describe("AC 12: exhausted retries move to DLQ", () => {
+describe("Legacy coverage: exhausted retries move to DLQ", () => {
 	it("moves job to jobs_dead when retry_count reaches retry_limit", async () => {
 		const boss = await createBoss(pool);
 		const queue = "retry-q-12";
@@ -218,7 +218,7 @@ describe("AC 12: exhausted retries move to DLQ", () => {
 	}, 15000);
 });
 
-describe("AC 13: retry_limit=0 means immediate DLQ", () => {
+describe("Legacy coverage: retry_limit=0 means immediate DLQ", () => {
 	it("sends job straight to DLQ on first failure when retryLimit=0", async () => {
 		const boss = await createBoss(pool);
 		const queue = "retry-q-13";

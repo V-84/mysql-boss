@@ -29,7 +29,7 @@ afterAll(async () => {
 	await pool.end();
 });
 
-describe("AC 29: stop() drains in-flight handlers", () => {
+describe("Legacy coverage: stop() drains in-flight handlers", () => {
 	it("waits for running handlers to finish before resolving", async () => {
 		const boss = await createBoss(pool, { drainTimeoutMs: 10000 });
 		const queue = "drain-q-29";
@@ -49,7 +49,7 @@ describe("AC 29: stop() drains in-flight handlers", () => {
 	}, 15000);
 });
 
-describe("AC 30: stop() aborts handlers exceeding drainTimeoutMs", () => {
+describe("Legacy coverage: stop() aborts handlers exceeding drainTimeoutMs", () => {
 	it("aborts long-running handlers after drain timeout", async () => {
 		const boss = await createBoss(pool, {
 			drainTimeoutMs: 1000,
@@ -82,7 +82,7 @@ describe("AC 30: stop() aborts handlers exceeding drainTimeoutMs", () => {
 	}, 10000);
 });
 
-describe("AC 31: straggler jobs released after drain timeout", () => {
+describe("Legacy coverage: straggler jobs released after drain timeout", () => {
 	it("releases timed-out jobs back to available state", async () => {
 		const boss = await createBoss(pool, {
 			drainTimeoutMs: 1000,
@@ -117,7 +117,7 @@ describe("AC 31: straggler jobs released after drain timeout", () => {
 	}, 10000);
 });
 
-describe("AC 32: heartbeat extends lease", () => {
+describe("Legacy coverage: heartbeat extends lease", () => {
 	it("heartbeat renews lease_expires_at for in-flight jobs", async () => {
 		const boss = await createBoss(pool, {
 			leaseSeconds: 5,
@@ -155,7 +155,7 @@ describe("AC 32: heartbeat extends lease", () => {
 	}, 10000);
 });
 
-describe("AC 33: sweep reclaims expired leases", () => {
+describe("Legacy coverage: sweep reclaims expired leases", () => {
 	it("sweep returns expired-lease jobs to available", async () => {
 		const boss = await createBoss(pool);
 
@@ -185,7 +185,7 @@ describe("AC 33: sweep reclaims expired leases", () => {
 	}, 10000);
 });
 
-describe("AC 34: sweep DLQs exhausted expired-lease jobs", () => {
+describe("Legacy coverage: sweep DLQs exhausted expired-lease jobs", () => {
 	it("sweep moves expired-lease exhausted-retry jobs to DLQ", async () => {
 		const boss = await createBoss(pool);
 

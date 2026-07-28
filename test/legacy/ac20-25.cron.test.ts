@@ -18,7 +18,7 @@ afterAll(async () => {
 	await pool.end();
 });
 
-describe("AC 20: schedule() upserts a cron schedule", () => {
+describe("Legacy coverage: schedule() upserts a cron schedule", () => {
 	it("creates a schedule that the tick can fire", async () => {
 		const boss = await createBoss(pool);
 
@@ -58,7 +58,7 @@ describe("AC 20: schedule() upserts a cron schedule", () => {
 	}, 5000);
 });
 
-describe("AC 21: unschedule() removes a schedule", () => {
+describe("Legacy coverage: unschedule() removes a schedule", () => {
 	it("deletes a schedule by name", async () => {
 		const boss = await createBoss(pool);
 
@@ -82,7 +82,7 @@ describe("AC 21: unschedule() removes a schedule", () => {
 	}, 5000);
 });
 
-describe("AC 22: cron tick fires due schedules", () => {
+describe("Legacy coverage: cron tick fires due schedules", () => {
 	it("enqueues a job when next_run_at is in the past", async () => {
 		const boss = await createBoss(pool, { tickIntervalMs: 500 });
 		const queue = "cron-q-22";
@@ -110,7 +110,7 @@ describe("AC 22: cron tick fires due schedules", () => {
 	}, 10000);
 });
 
-describe("AC 23: cron tick advances next_run_at", () => {
+describe("Legacy coverage: cron tick advances next_run_at", () => {
 	it("updates next_run_at after firing", async () => {
 		const boss = await createBoss(pool, { tickIntervalMs: 500 });
 		const queue = "cron-q-23";
@@ -145,7 +145,7 @@ describe("AC 23: cron tick advances next_run_at", () => {
 	}, 10000);
 });
 
-describe("AC 24: cron parser handles 5-field Vixie cron", () => {
+describe("Legacy coverage: cron parser handles 5-field Vixie cron", () => {
 	it("parses standard expressions", () => {
 		const fields = parseCron("*/15 9-17 * * 1-5");
 		expect(fields.minutes.has(0)).toBe(true);
@@ -184,7 +184,7 @@ describe("AC 24: cron parser handles 5-field Vixie cron", () => {
 	});
 });
 
-describe("AC 25: timezone-aware next occurrence", () => {
+describe("Legacy coverage: timezone-aware next occurrence", () => {
 	it("computes next occurrence in UTC", () => {
 		const fields = parseCron("0 12 * * *");
 		const after = new Date("2026-07-28T11:00:00Z");

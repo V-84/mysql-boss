@@ -19,7 +19,7 @@ beforeEach(async () => {
 	await cleanTables(pool);
 });
 
-describe("AC 1: migrate() idempotent", () => {
+describe("Legacy coverage: migrate() idempotent", () => {
 	it("running migrate() twice produces no error", async () => {
 		const boss = new MysqlBoss({ pool });
 		await boss.migrate();
@@ -38,7 +38,7 @@ describe("AC 1: migrate() idempotent", () => {
 	});
 });
 
-describe("AC 2: runAt future unclaimable", () => {
+describe("Legacy coverage: runAt future unclaimable", () => {
 	it("a job with runAt in the future is not claimed", async () => {
 		const boss = await createBoss(pool);
 		const futureDate = new Date(Date.now() + 60 * 60 * 1000);
@@ -63,7 +63,7 @@ describe("AC 2: runAt future unclaimable", () => {
 	});
 });
 
-describe("AC 3: exactly-once under contention", () => {
+describe("Legacy coverage: exactly-once under contention", () => {
 	it("4 workers x 1000 jobs, each handler executes exactly once", async () => {
 		const boss1 = await createBoss(pool, {
 			pollIntervalMs: 50,
@@ -89,6 +89,7 @@ describe("AC 3: exactly-once under contention", () => {
 
 		// Create 4 worker bosses
 		const workers: MysqlBoss[] = [];
+		const workerPools: Pool[] = [];
 		const errors: Error[] = [];
 
 		for (let w = 0; w < 4; w++) {
@@ -112,6 +113,7 @@ describe("AC 3: exactly-once under contention", () => {
 			});
 
 			workers.push(worker);
+			workerPools.push(workerPool);
 		}
 
 		// Wait for all jobs to be processed
@@ -127,6 +129,9 @@ describe("AC 3: exactly-once under contention", () => {
 		// Stop all workers
 		for (const w of workers) {
 			await w.stop();
+		}
+		for (const workerPool of workerPools) {
+			await workerPool.end();
 		}
 		await boss1.stop();
 
@@ -146,7 +151,7 @@ describe("AC 3: exactly-once under contention", () => {
 	}, 90_000);
 });
 
-describe("AC 4: claim returns at most batchSize jobs", () => {
+describe("Legacy coverage: claim returns at most batchSize jobs", () => {
 	it("claims correct batch with correct state transitions", async () => {
 		const boss = await createBoss(pool, { batchSize: 3 });
 
@@ -192,7 +197,7 @@ describe("AC 4: claim returns at most batchSize jobs", () => {
 	});
 });
 
-describe("AC 5: concurrent claims no overlap", () => {
+describe("Legacy coverage: concurrent claims no overlap", () => {
 	it("two concurrent claims never return overlapping job ids", async () => {
 		const boss = await createBoss(pool);
 
@@ -230,6 +235,7 @@ describe("AC 5: concurrent claims no overlap", () => {
 
 		await boss.stop();
 		await boss2.stop();
+		await pool2.end();
 
 		// Check no overlap
 		const overlap = claimedByWorker1.filter((id) =>
@@ -242,7 +248,7 @@ describe("AC 5: concurrent claims no overlap", () => {
 	});
 });
 
-describe("AC 6: singletonKey deduplication", () => {
+describe("Legacy coverage: singletonKey deduplication", () => {
 	it("duplicate singletonKey on same queue returns null", async () => {
 		const boss = await createBoss(pool);
 
@@ -287,7 +293,7 @@ describe("AC 6: singletonKey deduplication", () => {
 	});
 });
 
-describe("AC 7: fenced completion", () => {
+describe("Legacy coverage: fenced completion", () => {
 	it("a completion attempt by a worker whose lease was reassigned affects 0 rows", async () => {
 		const boss = await createBoss(pool, {
 			leaseSeconds: 3,
@@ -337,7 +343,7 @@ describe("AC 7: fenced completion", () => {
 	});
 });
 
-describe("AC 8: READ COMMITTED + UTC timezone", () => {
+describe("Legacy coverage: READ COMMITTED + UTC timezone", () => {
 	it("every pooled connection used by the library runs READ COMMITTED with UTC", async () => {
 		const boss = await createBoss(pool);
 
