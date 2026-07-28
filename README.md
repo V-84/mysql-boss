@@ -1,5 +1,8 @@
 # mysql-boss
 
+[![CI](https://github.com/V-84/mysql-boss/actions/workflows/ci.yml/badge.svg)](https://github.com/V-84/mysql-boss/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/V-84/mysql-boss/branch/main/graph/badge.svg)](https://codecov.io/gh/V-84/mysql-boss)
+
 A [pg-boss](https://github.com/timgit/pg-boss)-inspired job queue built for **MySQL 8.0.1+**. Zero runtime dependencies beyond [`mysql2`](https://github.com/sidorares/node-mysql2).
 
 Correctness first, throughput second. Uses `FOR UPDATE SKIP LOCKED` for non-blocking, contention-safe job claims with lease-based crash recovery.
