@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MysqlBoss } from "../../src/index.js";
-import { createPool, createBoss, cleanTables } from "../helpers.js";
+import { cleanTables, createBoss, createPool } from "../helpers.js";
 
 let pool: Pool;
 

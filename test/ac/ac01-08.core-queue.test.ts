@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
-import { MysqlBoss, ConfigError, ValidationError } from "../../src/index.js";
-import { createPool, createBoss, cleanTables } from "../helpers.js";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { ConfigError, MysqlBoss, ValidationError } from "../../src/index.js";
+import { cleanTables, createBoss, createPool } from "../helpers.js";
 
 let pool: Pool;
 
@@ -65,7 +65,11 @@ describe("AC 2: runAt future unclaimable", () => {
 
 describe("AC 3: exactly-once under contention", () => {
 	it("4 workers x 1000 jobs, each handler executes exactly once", async () => {
-		const boss1 = await createBoss(pool, { pollIntervalMs: 50, batchSize: 20, concurrency: 20 });
+		const boss1 = await createBoss(pool, {
+			pollIntervalMs: 50,
+			batchSize: 20,
+			concurrency: 20,
+		});
 
 		// Create side-effect table with unique constraint
 		await pool.query(`
@@ -102,10 +106,9 @@ describe("AC 3: exactly-once under contention", () => {
 			await worker.migrate();
 
 			worker.work("contention-q", async (job) => {
-				await pool.query(
-					"INSERT INTO side_effects (job_id) VALUES (?)",
-					[BigInt(job.id)],
-				);
+				await pool.query("INSERT INTO side_effects (job_id) VALUES (?)", [
+					BigInt(job.id),
+				]);
 			});
 
 			workers.push(worker);
@@ -243,10 +246,18 @@ describe("AC 6: singletonKey deduplication", () => {
 	it("duplicate singletonKey on same queue returns null", async () => {
 		const boss = await createBoss(pool);
 
-		const id1 = await boss.enqueue("singleton-q", { v: 1 }, { singletonKey: "dedup" });
+		const id1 = await boss.enqueue(
+			"singleton-q",
+			{ v: 1 },
+			{ singletonKey: "dedup" },
+		);
 		expect(id1).not.toBeNull();
 
-		const id2 = await boss.enqueue("singleton-q", { v: 2 }, { singletonKey: "dedup" });
+		const id2 = await boss.enqueue(
+			"singleton-q",
+			{ v: 2 },
+			{ singletonKey: "dedup" },
+		);
 		expect(id2).toBeNull();
 
 		// Only one job exists
@@ -259,8 +270,16 @@ describe("AC 6: singletonKey deduplication", () => {
 	it("same singletonKey on different queue inserts", async () => {
 		const boss = await createBoss(pool);
 
-		const id1 = await boss.enqueue("queue-a", { v: 1 }, { singletonKey: "shared" });
-		const id2 = await boss.enqueue("queue-b", { v: 2 }, { singletonKey: "shared" });
+		const id1 = await boss.enqueue(
+			"queue-a",
+			{ v: 1 },
+			{ singletonKey: "shared" },
+		);
+		const id2 = await boss.enqueue(
+			"queue-b",
+			{ v: 2 },
+			{ singletonKey: "shared" },
+		);
 
 		expect(id1).not.toBeNull();
 		expect(id2).not.toBeNull();
@@ -270,7 +289,10 @@ describe("AC 6: singletonKey deduplication", () => {
 
 describe("AC 7: fenced completion", () => {
 	it("a completion attempt by a worker whose lease was reassigned affects 0 rows", async () => {
-		const boss = await createBoss(pool, { leaseSeconds: 3, heartbeatSeconds: 1 });
+		const boss = await createBoss(pool, {
+			leaseSeconds: 3,
+			heartbeatSeconds: 1,
+		});
 
 		await boss.enqueue("fence-q", { data: "test" });
 

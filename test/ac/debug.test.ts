@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import type { Pool, RowDataPacket } from "mysql2/promise";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MysqlBoss } from "../../src/index.js";
-import { createPool, createBoss, cleanTables } from "../helpers.js";
+import { cleanTables, createBoss, createPool } from "../helpers.js";
 
 let pool: Pool;
 
@@ -43,7 +43,7 @@ describe("debug: basic work flow", () => {
 		const deadline = Date.now() + 15_000;
 		while (Date.now() < deadline) {
 			if (processed.length >= JOB_COUNT) break;
-			await new Promise(r => setTimeout(r, 200));
+			await new Promise((r) => setTimeout(r, 200));
 		}
 
 		console.log(`Processed ${processed.length} / ${JOB_COUNT}`);
@@ -71,11 +71,15 @@ describe("debug: basic work flow", () => {
 		console.log("Jobs before work:", before);
 
 		let processed = false;
-		let jobPayload: any = null;
-		let jobError: any = null;
+		let jobPayload: unknown = null;
+		const _jobError: unknown = null;
 
 		boss.work("debug-q", async (job) => {
-			console.log("Handler called with job:", job.id, JSON.stringify(job.payload));
+			console.log(
+				"Handler called with job:",
+				job.id,
+				JSON.stringify(job.payload),
+			);
 			processed = true;
 			jobPayload = job.payload;
 		});
