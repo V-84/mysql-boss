@@ -14,5 +14,10 @@ Vitest starts an ephemeral `mysql:8.0` container through Testcontainers. CI may
 provide its own MySQL service through the standard `MYSQL_*` environment
 variables.
 
-The tests under `test/legacy/` are retained as additional regression coverage.
-They deliberately do not use AC numbers.
+Additional non-AC coverage lives in focused suites:
+
+- `test/business-logic/`: deterministic unit tests for defensive and calendar
+  branches.
+- `test/regressions*.test.ts`: public API and previously reported bug
+  regressions.
+- `test/table-prefix.test.ts`: prefixed-schema integration coverage.

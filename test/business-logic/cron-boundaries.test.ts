@@ -89,6 +89,8 @@ describe("cron calendar boundary business logic", () => {
 	it("rejects invalid steps, invalid timezones, and exhausted search windows", () => {
 		expect(() => parseCron("*/0 * * * *")).toThrow(/Invalid step/);
 		expect(() => parseCron("*/wat * * * *")).toThrow(/Invalid step/);
+		expect(() => parseCron("* * *")).toThrow(/exactly 5 fields/);
+		expect(() => parseCron("60 * * * *")).toThrow(/Value out of range/);
 		expect(() =>
 			nextOccurrence(
 				parseCron("* * * * *"),
