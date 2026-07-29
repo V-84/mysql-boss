@@ -31,6 +31,12 @@ describe("cron calendar boundary business logic", () => {
 			expected: "2026-03-01T00:00:00.000Z",
 		},
 		{
+			name: "restricted month across a year boundary",
+			cron: "0 0 1 1 *",
+			after: "2026-11-01T00:00:00.000Z",
+			expected: "2027-01-01T00:00:00.000Z",
+		},
+		{
 			name: "day mismatch across a month boundary",
 			cron: "0 0 1 * *",
 			after: "2026-01-01T00:00:00.000Z",
@@ -56,6 +62,19 @@ describe("cron calendar boundary business logic", () => {
 		expect(next("0 9 15 * mon", "2026-07-12T10:00:00.000Z")).toBe(
 			"2026-07-13T09:00:00.000Z",
 		);
+	});
+
+	it("advances a day-of-month restriction across the end of a year", () => {
+		expect(next("0 0 1 * *", "2026-12-02T00:00:00.000Z")).toBe(
+			"2027-01-01T00:00:00.000Z",
+		);
+	});
+
+	it("skips a civil date removed by an international date-line transition", () => {
+		// Kiritimati moved from UTC-10 to UTC+14 and skipped 1994-12-31.
+		expect(
+			next("0 0 1 12,1 *", "1994-12-31T09:59:00.000Z", "Pacific/Kiritimati"),
+		).toBe("1994-12-31T10:00:00.000Z");
 	});
 
 	it("handles named fields, steps, wraparound ranges, and Sunday alias 7", () => {
