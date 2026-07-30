@@ -11,6 +11,7 @@ import type {
 	JobHandler,
 	MysqlBossOptions,
 	ScheduleOptions,
+	WorkOptions,
 } from "./index.js";
 import { migrate } from "./migrate.js";
 import { type SqlStatements, createSql } from "./sql.js";
@@ -36,6 +37,7 @@ export class MysqlBoss {
 	private tickIntervalMs: number;
 	private archiveRetentionDays: number;
 	private drainTimeoutMs: number;
+	private maintenance: boolean;
 	private onError: (err: unknown, context: string) => void;
 
 	constructor(opts: MysqlBossOptions) {
@@ -58,6 +60,7 @@ export class MysqlBoss {
 		this.tickIntervalMs = opts.tickIntervalMs ?? 30_000;
 		this.archiveRetentionDays = opts.archiveRetentionDays ?? 14;
 		this.drainTimeoutMs = opts.drainTimeoutMs ?? 30_000;
+		this.maintenance = opts.maintenance ?? true;
 		this.onError = opts.onError ?? (() => {});
 
 		if (this.batchSize < 1 || this.batchSize > 100) {
@@ -156,9 +159,20 @@ export class MysqlBoss {
 		});
 	}
 
-	work<T>(queue: string, handler: JobHandler<T>): void {
+	work<T>(queue: string, handler: JobHandler<T>, opts?: WorkOptions): void {
 		if (this.stopped) {
 			throw new Error("Cannot register work after stop()");
+		}
+
+		const queueConcurrency = opts?.concurrency ?? this.concurrency;
+		if (
+			!Number.isInteger(queueConcurrency) ||
+			queueConcurrency < 1 ||
+			queueConcurrency > 1000
+		) {
+			throw new ValidationError(
+				`concurrency must be an integer between 1 and 1000, got ${opts?.concurrency}`,
+			);
 		}
 
 		if (!this.worker) {
@@ -172,13 +186,16 @@ export class MysqlBoss {
 				heartbeatSeconds: this.heartbeatSeconds,
 				sweepIntervalMs: this.sweepIntervalMs,
 				drainTimeoutMs: this.drainTimeoutMs,
+				maintenance: this.maintenance,
 				onError: this.onError,
 				sql: this.sql,
 			});
-			this.startTick();
+			if (this.maintenance) {
+				this.startTick();
+			}
 		}
 
-		this.worker.registerQueue(queue, handler as JobHandler);
+		this.worker.registerQueue(queue, handler as JobHandler, queueConcurrency);
 	}
 
 	private startTick(): void {
