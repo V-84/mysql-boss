@@ -220,7 +220,8 @@ describe("Implementation spec acceptance criteria 39-45", () => {
 					pool,
 					"SELECT COUNT(*) AS count FROM jobs_archive WHERE queue = 'wide'",
 				);
-				return n === 50 && w === 50 ? true : false;
+				if (n === 50 && w === 50) return true;
+				return false;
 			},
 			30_000,
 		);
@@ -293,17 +294,17 @@ describe("Implementation spec acceptance criteria 39-45", () => {
 			batchSize: 10,
 		});
 
-		expect(() =>
-			boss.work("v1", async () => {}, { concurrency: 0 }),
-		).toThrow(ValidationError);
+		expect(() => boss.work("v1", async () => {}, { concurrency: 0 })).toThrow(
+			ValidationError,
+		);
 
-		expect(() =>
-			boss.work("v2", async () => {}, { concurrency: -1 }),
-		).toThrow(ValidationError);
+		expect(() => boss.work("v2", async () => {}, { concurrency: -1 })).toThrow(
+			ValidationError,
+		);
 
-		expect(() =>
-			boss.work("v3", async () => {}, { concurrency: 1.5 }),
-		).toThrow(ValidationError);
+		expect(() => boss.work("v3", async () => {}, { concurrency: 1.5 })).toThrow(
+			ValidationError,
+		);
 
 		expect(() =>
 			boss.work("v4", async () => {}, { concurrency: 1001 }),
@@ -318,9 +319,7 @@ describe("Implementation spec acceptance criteria 39-45", () => {
 		).not.toThrow();
 
 		// Queue should NOT be registered on failure
-		expect(() =>
-			boss.work("v1", async () => {}),
-		).not.toThrow(); // v1 was not registered (threw), so re-registering works
+		expect(() => boss.work("v1", async () => {})).not.toThrow(); // v1 was not registered (threw), so re-registering works
 	});
 
 	it("AC 44: maintenance opt-out — no sweep, tick, or prune when maintenance: false", async () => {
@@ -418,7 +417,8 @@ describe("Implementation spec acceptance criteria 39-45", () => {
 					"SELECT state FROM jobs WHERE id = ?",
 					[expiredId],
 				);
-				return row.length === 0 || row[0].state === "available" ? true : false;
+				if (row.length === 0 || row[0].state === "available") return true;
+				return false;
 			},
 			10_000,
 		);
@@ -490,20 +490,18 @@ describe("Implementation spec acceptance criteria 39-45", () => {
 
 		// Old worker (no WorkOptions)
 		oldBoss.work("ac45", async (job) => {
-			await pool.query(
-				"INSERT INTO ac45_side_effects (job_id) VALUES (?)",
-				[job.id],
-			);
+			await pool.query("INSERT INTO ac45_side_effects (job_id) VALUES (?)", [
+				job.id,
+			]);
 		});
 
 		// New worker (with WorkOptions)
 		newBoss.work(
 			"ac45",
 			async (job) => {
-				await pool.query(
-					"INSERT INTO ac45_side_effects (job_id) VALUES (?)",
-					[job.id],
-				);
+				await pool.query("INSERT INTO ac45_side_effects (job_id) VALUES (?)", [
+					job.id,
+				]);
 			},
 			{ concurrency: 5 },
 		);

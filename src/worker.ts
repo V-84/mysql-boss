@@ -45,7 +45,11 @@ export class WorkerManager {
 		this.config = config;
 	}
 
-	registerQueue(queue: string, handler: JobHandler, concurrency?: number): void {
+	registerQueue(
+		queue: string,
+		handler: JobHandler,
+		concurrency?: number,
+	): void {
 		if (this.registrations.has(queue)) {
 			throw new Error(`Handler already registered for queue "${queue}"`);
 		}
