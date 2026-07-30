@@ -19,6 +19,7 @@ interface WorkerConfig {
 	heartbeatSeconds: number;
 	sweepIntervalMs: number;
 	drainTimeoutMs: number;
+	maintenance: boolean;
 	onError: (err: unknown, context: string) => void;
 	sql: SqlStatements;
 }
@@ -33,6 +34,7 @@ interface InFlightJob {
 export class WorkerManager {
 	private config: WorkerConfig;
 	private registrations = new Map<string, JobHandler>();
+	private queueLimits = new Map<string, number>();
 	private inFlight = new Map<string, InFlightJob>();
 	private pollTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -43,11 +45,12 @@ export class WorkerManager {
 		this.config = config;
 	}
 
-	registerQueue(queue: string, handler: JobHandler): void {
+	registerQueue(queue: string, handler: JobHandler, concurrency?: number): void {
 		if (this.registrations.has(queue)) {
 			throw new Error(`Handler already registered for queue "${queue}"`);
 		}
 		this.registrations.set(queue, handler);
+		this.queueLimits.set(queue, concurrency ?? this.config.concurrency);
 		this.startPolling(queue);
 		this.ensureTimers();
 	}
@@ -60,7 +63,7 @@ export class WorkerManager {
 			);
 			this.heartbeatTimer.unref();
 		}
-		if (!this.sweepTimer) {
+		if (!this.sweepTimer && this.config.maintenance) {
 			const jitteredInterval =
 				this.config.sweepIntervalMs * (0.8 + Math.random() * 0.4);
 			this.sweepTimer = setInterval(() => this.sweep(), jitteredInterval);
@@ -84,7 +87,8 @@ export class WorkerManager {
 			if (key.startsWith(`${queue}/`)) queueInFlight++;
 		}
 
-		const available = this.config.concurrency - queueInFlight;
+		const limit = this.queueLimits.get(queue) ?? this.config.concurrency;
+		const available = limit - queueInFlight;
 		if (available <= 0) {
 			this.schedulePoll(queue);
 			return;
